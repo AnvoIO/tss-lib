@@ -24,7 +24,12 @@ func (round *round3) Start() *tss.Error {
 	if !round.ReSharingParams().IsOldCommittee() {
 		return nil
 	}
-	round.allOldOK()
+	// Fix for bnb-chain/tss-lib#128: Only call allOldOK() when the party is
+	// exclusively in the old committee. When a party is in BOTH committees,
+	// premature marking causes message processing to be skipped.
+	if !round.ReSharingParams().IsNewCommittee() {
+		round.allOldOK()
+	}
 
 	Pi := round.PartyID()
 	i := Pi.Index
@@ -33,8 +38,14 @@ func (round *round3) Start() *tss.Error {
 	for j, Pj := range round.NewParties().IDs() {
 		share := round.temp.NewShares[j]
 		r3msg1 := NewDGRound3Message1(Pj, round.PartyID(), share)
-		round.temp.dgRound3Message1s[i] = r3msg1
-		round.out <- r3msg1
+		// Fix for bnb-chain/tss-lib#128: When sender is also a receiver
+		// (party in both old and new committees), store locally instead
+		// of sending over the wire to avoid routing issues.
+		if round.ReSharingParams().IsNewCommittee() && Pj.KeyInt().Cmp(Pi.KeyInt()) == 0 {
+			round.temp.dgRound3Message1s[i] = r3msg1
+		} else {
+			round.out <- r3msg1
+		}
 	}
 
 	vDeCmt := round.temp.VD
