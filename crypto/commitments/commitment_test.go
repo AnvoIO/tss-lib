@@ -13,7 +13,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	. "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
+	. "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
 )
 
 func TestCreateVerify(t *testing.T) {

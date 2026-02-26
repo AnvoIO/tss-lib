@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 // The Paillier Crypto-system is an additive crypto-system. This means that given two ciphertexts, one can perform operations equivalent to adding the respective plain texts.
 // Additionally, Paillier Crypto-system supports further computations:
@@ -27,8 +28,8 @@ import (
 
 	"github.com/otiai10/primes"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	crypto2 "github.com/bnb-chain/tss-lib/v2/crypto"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	crypto2 "github.com/AnvoIO/tss-lib/v3/crypto"
 )
 
 const (
@@ -71,9 +72,12 @@ func GenerateKeyPair(ctx context.Context, rand io.Reader, modulusBitLen int, opt
 	var concurrency int
 	if 0 < len(optionalConcurrency) {
 		if 1 < len(optionalConcurrency) {
-			panic(errors.New("GeneratePreParams: expected 0 or 1 item in `optionalConcurrency`"))
+			return nil, nil, errors.New("GenerateKeyPair: expected 0 or 1 item in `optionalConcurrency`")
 		}
 		concurrency = optionalConcurrency[0]
+		if concurrency < 1 {
+			return nil, nil, errors.New("GenerateKeyPair: `optionalConcurrency` must be >= 1")
+		}
 	} else {
 		concurrency = runtime.NumCPU()
 	}
@@ -186,6 +190,9 @@ func (privateKey *PrivateKey) Decrypt(c *big.Int) (m *big.Int, err error) {
 	Lg := L(new(big.Int).Exp(privateKey.Gamma(), privateKey.LambdaN, N2), privateKey.N)
 	// 3. (1) * modInv(2) mod N
 	inv := new(big.Int).ModInverse(Lg, privateKey.N)
+	if inv == nil {
+		return nil, fmt.Errorf("L(g^lambda) is not invertible mod N")
+	}
 	m = common.ModInt(privateKey.N).Mul(Lc, inv)
 	return
 }
@@ -196,15 +203,18 @@ func (privateKey *PrivateKey) Decrypt(c *big.Int) (m *big.Int, err error) {
 // An efficient non-interactive statistical zero-knowledge proof system for quasi-safe prime products.
 // In: In Proc. of the 5th ACM Conference on Computer and Communications Security (CCS-98. Citeseer (1998)
 
-func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) Proof {
+func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) (Proof, error) {
 	var pi Proof
 	iters := ProofIters
 	xs := GenerateXs(iters, k, privateKey.N, ecdsaPub)
 	for i := 0; i < iters; i++ {
 		M := new(big.Int).ModInverse(privateKey.N, privateKey.PhiN)
+		if M == nil {
+			return pi, fmt.Errorf("N is not invertible mod PhiN")
+		}
 		pi[i] = new(big.Int).Exp(xs[i], M, privateKey.N)
 	}
-	return pi
+	return pi, nil
 }
 
 func (pf Proof) Verify(pkN, k *big.Int, ecdsaPub *crypto2.ECPoint) (bool, error) {

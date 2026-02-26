@@ -1,16 +1,16 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
 import (
-	"errors"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
 )
 
 type DlnProofVerifier struct {
@@ -23,8 +23,8 @@ type message interface {
 }
 
 func NewDlnProofVerifier(concurrency int) *DlnProofVerifier {
-	if concurrency == 0 {
-		panic(errors.New("NewDlnProofverifier: concurrency level must not be zero"))
+	if concurrency < 1 {
+		concurrency = 1
 	}
 
 	semaphore := make(chan interface{}, concurrency)

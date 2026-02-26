@@ -12,11 +12,11 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/facproof"
-	"github.com/bnb-chain/tss-lib/v2/crypto/modproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/facproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/modproof"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 const (

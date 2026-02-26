@@ -1,17 +1,18 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
 import (
 	"errors"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto/paillier"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *round4) Start() *tss.Error {
@@ -73,6 +74,7 @@ func (round *round4) Start() *tss.Error {
 		return round.WrapError(errors.New("paillier verify failed"), culprits...)
 	}
 
+	round.temp.Clear()
 	round.end <- round.save
 
 	return nil

@@ -1,0 +1,152 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
+//
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
+
+package signing
+
+import (
+	"math/big"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/test"
+	"github.com/AnvoIO/tss-lib/v3/tss"
+)
+
+func tamperEdDSASignAnyField(wireBytes []byte, targetMsgType string, tamperFn func([]byte) []byte) []byte {
+	var anyMsg anypb.Any
+	if err := proto.Unmarshal(wireBytes, &anyMsg); err != nil {
+		return wireBytes
+	}
+	if !strings.Contains(anyMsg.TypeUrl, targetMsgType) {
+		return wireBytes
+	}
+	anyMsg.Value = tamperFn(anyMsg.Value)
+	out, err := proto.Marshal(&anyMsg)
+	if err != nil {
+		return wireBytes
+	}
+	return out
+}
+
+func runAdversarialEdDSASigning(t *testing.T, updater func(tss.Party, tss.Message, chan<- *tss.Error)) *tss.Error {
+	t.Helper()
+
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	require.NoError(t, err, "should load keygen fixtures")
+
+	p2pCtx := tss.NewPeerContext(signPIDs)
+	parties := make([]*LocalParty, 0, len(signPIDs))
+
+	errCh := make(chan *tss.Error, len(signPIDs))
+	outCh := make(chan tss.Message, len(signPIDs))
+	endCh := make(chan *common.SignatureData, len(signPIDs))
+
+	msg := big.NewInt(200)
+	for i := 0; i < len(signPIDs); i++ {
+		params, pErr := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), testThreshold)
+		require.NoError(t, pErr)
+		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
+		parties = append(parties, P)
+		go func(P *LocalParty) {
+			if err := P.Start(); err != nil {
+				errCh <- err
+			}
+		}(P)
+	}
+
+	var ended int32
+	for {
+		select {
+		case err := <-errCh:
+			return err
+
+		case msg := <-outCh:
+			dest := msg.GetTo()
+			if dest == nil {
+				for _, P := range parties {
+					if P.PartyID().Index == msg.GetFrom().Index {
+						continue
+					}
+					go updater(P, msg, errCh)
+				}
+			} else {
+				if dest[0].Index == msg.GetFrom().Index {
+					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
+					return nil
+				}
+				go updater(parties[dest[0].Index], msg, errCh)
+			}
+
+		case <-endCh:
+			atomic.AddInt32(&ended, 1)
+			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
+				return nil
+			}
+		}
+	}
+}
+
+func TestAdversarial_EdDSA_Sign_InvalidDecommitment(t *testing.T) {
+	setUp("info")
+	adversaryIdx := 0
+
+	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+		return tamperEdDSASignAnyField(wireBytes, "SignRound2Message", func(value []byte) []byte {
+			var msg SignRound2Message
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			if len(msg.DeCommitment) > 0 && len(msg.DeCommitment[0]) > 0 {
+				msg.DeCommitment[0] = test.FlipBytesAt(msg.DeCommitment[0], 0)
+			}
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+	})
+
+	tssErr := runAdversarialEdDSASigning(t, updater)
+	require.NotNil(t, tssErr, "protocol should fail due to corrupted decommitment")
+	t.Logf("Error: %s", tssErr)
+	assert.True(t, len(tssErr.Culprits()) > 0 || strings.Contains(tssErr.Error(), "de-commitment"), "should identify failure")
+}
+
+func TestAdversarial_EdDSA_Sign_CorruptedSi(t *testing.T) {
+	setUp("info")
+	adversaryIdx := 0
+
+	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+		return tamperEdDSASignAnyField(wireBytes, "SignRound3Message", func(value []byte) []byte {
+			var msg SignRound3Message
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			if len(msg.S) > 0 {
+				msg.S = test.FlipBytesAt(msg.S, 0)
+			}
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+	})
+
+	tssErr := runAdversarialEdDSASigning(t, updater)
+	require.NotNil(t, tssErr, "protocol should fail due to corrupted Si")
+	t.Logf("Error: %s", tssErr)
+	assert.Contains(t, tssErr.Error(), "signature verification failed")
+}

@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -11,21 +12,21 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
 )
 
 // PrepareForSigning(), GG18Spec (11) Fig. 14
-func PrepareForSigning(ec elliptic.Curve, i, pax int, xi *big.Int, ks []*big.Int, bigXs []*crypto.ECPoint) (wi *big.Int, bigWs []*crypto.ECPoint) {
+func PrepareForSigning(ec elliptic.Curve, i, pax int, xi *big.Int, ks []*big.Int, bigXs []*crypto.ECPoint) (wi *big.Int, bigWs []*crypto.ECPoint, err error) {
 	modQ := common.ModInt(ec.Params().N)
 	if len(ks) != len(bigXs) {
-		panic(fmt.Errorf("PrepareForSigning: len(ks) != len(bigXs) (%d != %d)", len(ks), len(bigXs)))
+		return nil, nil, fmt.Errorf("PrepareForSigning: len(ks) != len(bigXs) (%d != %d)", len(ks), len(bigXs))
 	}
 	if len(ks) != pax {
-		panic(fmt.Errorf("PrepareForSigning: len(ks) != pax (%d != %d)", len(ks), pax))
+		return nil, nil, fmt.Errorf("PrepareForSigning: len(ks) != pax (%d != %d)", len(ks), pax)
 	}
 	if len(ks) <= i {
-		panic(fmt.Errorf("PrepareForSigning: len(ks) <= i (%d <= %d)", len(ks), i))
+		return nil, nil, fmt.Errorf("PrepareForSigning: len(ks) <= i (%d <= %d)", len(ks), i)
 	}
 
 	// 2-4.
@@ -37,10 +38,14 @@ func PrepareForSigning(ec elliptic.Curve, i, pax int, xi *big.Int, ks []*big.Int
 		ksj := ks[j]
 		ksi := ks[i]
 		if ksj.Cmp(ksi) == 0 {
-			panic(fmt.Errorf("index of two parties are equal"))
+			return nil, nil, fmt.Errorf("index of two parties are equal")
 		}
 		// big.Int Div is calculated as: a/b = a * modInv(b,q)
-		coef := modQ.Mul(ks[j], modQ.ModInverse(new(big.Int).Sub(ksj, ksi)))
+		inv, err := modQ.ModInverseChecked(new(big.Int).Sub(ksj, ksi))
+		if err != nil {
+			return nil, nil, fmt.Errorf("PrepareForSigning: ModInverse failed: %v", err)
+		}
+		coef := modQ.Mul(ks[j], inv)
 		wi = modQ.Mul(wi, coef)
 	}
 
@@ -55,10 +60,14 @@ func PrepareForSigning(ec elliptic.Curve, i, pax int, xi *big.Int, ks []*big.Int
 			ksc := ks[c]
 			ksj := ks[j]
 			if ksj.Cmp(ksc) == 0 {
-				panic(fmt.Errorf("index of two parties are equal"))
+				return nil, nil, fmt.Errorf("index of two parties are equal")
 			}
 			// big.Int Div is calculated as: a/b = a * modInv(b,q)
-			iota := modQ.Mul(ksc, modQ.ModInverse(new(big.Int).Sub(ksc, ksj)))
+			inv, err := modQ.ModInverseChecked(new(big.Int).Sub(ksc, ksj))
+			if err != nil {
+				return nil, nil, fmt.Errorf("PrepareForSigning: ModInverse failed: %v", err)
+			}
+			iota := modQ.Mul(ksc, inv)
 			bigWj = bigWj.ScalarMult(iota)
 		}
 		bigWs[j] = bigWj

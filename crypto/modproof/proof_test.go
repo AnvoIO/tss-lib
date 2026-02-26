@@ -1,25 +1,61 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019-2023 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package modproof_test
 
 import (
 	"crypto/rand"
-	"fmt"
 	"math/big"
 	"testing"
 	"time"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	. "github.com/bnb-chain/tss-lib/v2/crypto/modproof"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	. "github.com/AnvoIO/tss-lib/v3/crypto/modproof"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
 	"github.com/stretchr/testify/assert"
 )
 
 var Session = []byte("session")
+
+func TestVerifySmallN(test *testing.T) {
+	// N < 2048 bits should fail verification
+	smallN := new(big.Int).SetBit(new(big.Int), 1024, 1) // 2^1024
+	smallN.Sub(smallN, big.NewInt(1))                    // make it odd
+
+	// Create a dummy proof that passes ValidateBasic
+	pf := &ProofMod{
+		W: big.NewInt(2),
+		A: new(big.Int).SetBit(new(big.Int), Iterations, 1),
+		B: new(big.Int).SetBit(new(big.Int), Iterations, 1),
+	}
+	for i := 0; i < Iterations; i++ {
+		pf.X[i] = big.NewInt(2)
+		pf.Z[i] = big.NewInt(2)
+	}
+	ok := pf.Verify(Session, smallN)
+	assert.False(test, ok, "Verify should reject N < 2048 bits")
+}
+
+func TestVerifyEvenN(test *testing.T) {
+	// Even N should fail verification
+	evenN := new(big.Int).SetBit(new(big.Int), 2048, 1) // 2^2048 (even)
+
+	pf := &ProofMod{
+		W: big.NewInt(2),
+		A: new(big.Int).SetBit(new(big.Int), Iterations, 1),
+		B: new(big.Int).SetBit(new(big.Int), Iterations, 1),
+	}
+	for i := 0; i < Iterations; i++ {
+		pf.X[i] = big.NewInt(2)
+		pf.Z[i] = big.NewInt(2)
+	}
+	ok := pf.Verify(Session, evenN)
+	assert.False(test, ok, "Verify should reject even N")
+}
 
 func TestMod(test *testing.T) {
 	preParams, err := keygen.GeneratePreParams(time.Minute*10, 8)

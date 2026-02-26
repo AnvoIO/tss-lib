@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -11,12 +12,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	cmt "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/mta"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	cmt "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/mta"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // Implements Party
@@ -158,6 +159,28 @@ func NewLocalPartyWithKDD(
 	p.temp.pi2jis = make([]*mta.ProofBobWC, partyCount)
 	p.temp.vs = make([]*big.Int, partyCount)
 	return p
+}
+
+// Clear zeros sensitive data in temp storage to reduce the window of exposure.
+// Internally-generated secrets are zeroed in-place; externally-provided values
+// (like m) are nil'd out to avoid mutating the caller's data.
+func (td *localTempData) Clear() {
+	for _, field := range []*big.Int{td.w, td.k, td.theta, td.thetaInverse, td.sigma, td.gamma, td.si, td.li, td.roi} {
+		if field != nil {
+			field.SetInt64(0)
+		}
+	}
+	td.m = nil // externally provided; do not mutate caller's big.Int
+	for _, b := range td.betas {
+		if b != nil {
+			b.SetInt64(0)
+		}
+	}
+	for _, c := range td.cis {
+		if c != nil {
+			c.SetInt64(0)
+		}
+	}
 }
 
 func (p *LocalParty) FirstRound() tss.Round {

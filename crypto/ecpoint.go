@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package crypto
 
@@ -18,7 +19,7 @@ import (
 
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // ECPoint convenience helper
@@ -31,6 +32,12 @@ var (
 	eight    = big.NewInt(8)
 	eightInv = new(big.Int).ModInverse(eight, edwards.Edwards().Params().N)
 )
+
+func init() {
+	if eightInv == nil {
+		panic("crypto/ecpoint: failed to compute ModInverse(8, edwards.N)")
+	}
+}
 
 // Creates a new ECPoint and checks that the given coordinates are on the elliptic curve.
 func NewECPoint(curve elliptic.Curve, X, Y *big.Int) (*ECPoint, error) {
