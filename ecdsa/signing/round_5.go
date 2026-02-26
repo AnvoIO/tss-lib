@@ -66,9 +66,13 @@ func (round *round5) Start() *tss.Error {
 	ry := R.Y()
 	si := modN.Add(modN.Mul(round.temp.m, round.temp.k), modN.Mul(rx, round.temp.sigma))
 
-	// clear temp.w and temp.k from memory, lint ignore
-	round.temp.w = zero
-	round.temp.k = zero
+	// Clear secrets in place; do not assign package-level shared zero pointers.
+	if round.temp.w != nil {
+		round.temp.w.SetInt64(0)
+	}
+	if round.temp.k != nil {
+		round.temp.k.SetInt64(0)
+	}
 
 	li := common.GetRandomPositiveInt(round.Rand(), N) // li
 	if li == nil {
