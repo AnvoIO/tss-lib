@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019-2020 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 // Zero-knowledge proof of knowledge of the discrete logarithm over safe prime product
 
@@ -16,10 +17,11 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	cmts "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	cmts "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
 )
 
+// Iterations controls the soundness of the DLN proof: 128 iterations → 2^{-128} soundness error.
 const Iterations = 128
 
 type (

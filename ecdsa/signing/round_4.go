@@ -1,20 +1,22 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
 import (
 	"errors"
+	"fmt"
 	"math/big"
 
 	errors2 "github.com/pkg/errors"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto/schnorr"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto/schnorr"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *round4) Start() *tss.Error {
@@ -40,7 +42,11 @@ func (round *round4) Start() *tss.Error {
 	}
 
 	// compute the multiplicative inverse thelta mod q
-	thetaInverse = modN.ModInverse(thetaInverse)
+	thetaInverseChecked, err := modN.ModInverseChecked(thetaInverse)
+	if err != nil {
+		return round.WrapError(fmt.Errorf("theta is not invertible: %v", err))
+	}
+	thetaInverse = thetaInverseChecked
 	i := round.PartyID().Index
 	ContextI := append(round.temp.ssid, new(big.Int).SetUint64(uint64(i)).Bytes()...)
 	piGamma, err := schnorr.NewZKProof(ContextI, round.temp.gamma, round.temp.pointGamma, round.Rand())

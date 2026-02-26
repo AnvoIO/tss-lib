@@ -12,8 +12,8 @@ import (
 
 	errors2 "github.com/pkg/errors"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/schnorr"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/crypto/schnorr"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *round6) Start() *tss.Error {

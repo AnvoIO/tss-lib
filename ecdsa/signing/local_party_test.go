@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -20,10 +21,10 @@ import (
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/test"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/test"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 const (
@@ -59,7 +60,8 @@ func TestE2EConcurrent(t *testing.T) {
 	updater := test.SharedPartyUpdater
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
-		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		params, err := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		assert.NoError(t, err)
 		P := NewLocalParty(big.NewInt(42), params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
@@ -95,23 +97,15 @@ signing:
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
-		case <-endCh:
+		case sigData := <-endCh:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 				t.Logf("Done. Received signature data from %d participants", ended)
-				R := parties[0].temp.bigR
-				r := parties[0].temp.rx
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
 
-				modN := common.ModInt(tss.S256().Params().N)
-
-				// BEGIN check s correctness
-				sumS := big.NewInt(0)
-				for _, p := range parties {
-					sumS = modN.Add(sumS, p.temp.si)
-				}
-				fmt.Printf("S: %s\n", sumS.String())
-				// END check s correctness
+				// Use the finalized signature output (not internal temp state, which is cleared for security)
+				r := new(big.Int).SetBytes(sigData.R)
+				s := new(big.Int).SetBytes(sigData.S)
+				fmt.Printf("sign result: r=%s, s=%s\n", r.String(), s.String())
 
 				// BEGIN ECDSA verify
 				pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
@@ -120,7 +114,7 @@ signing:
 					X:     pkX,
 					Y:     pkY,
 				}
-				ok := ecdsa.Verify(&pk, big.NewInt(42).Bytes(), R.X(), sumS)
+				ok := ecdsa.Verify(&pk, big.NewInt(42).Bytes(), r, s)
 				assert.True(t, ok, "ecdsa verify must pass")
 				t.Log("ECDSA signing test done.")
 				// END ECDSA verify
@@ -154,7 +148,8 @@ func TestE2EConcurrentWithLeadingZeroInMSG(t *testing.T) {
 	msgData, _ := hex.DecodeString("00f163ee51bcaeff9cdff5e0e3c1a646abd19885fffbab0b3b4236e0cf95c9f5")
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
-		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		params, err := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		assert.NoError(t, err)
 		P := NewLocalParty(new(big.Int).SetBytes(msgData), params, keys[i], outCh, endCh, len(msgData)).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
@@ -190,23 +185,15 @@ signing:
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
-		case <-endCh:
+		case sigData := <-endCh:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 				t.Logf("Done. Received signature data from %d participants", ended)
-				R := parties[0].temp.bigR
-				r := parties[0].temp.rx
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
 
-				modN := common.ModInt(tss.S256().Params().N)
-
-				// BEGIN check s correctness
-				sumS := big.NewInt(0)
-				for _, p := range parties {
-					sumS = modN.Add(sumS, p.temp.si)
-				}
-				fmt.Printf("S: %s\n", sumS.String())
-				// END check s correctness
+				// Use the finalized signature output (not internal temp state, which is cleared for security)
+				r := new(big.Int).SetBytes(sigData.R)
+				s := new(big.Int).SetBytes(sigData.S)
+				fmt.Printf("sign result: r=%s, s=%s\n", r.String(), s.String())
 
 				// BEGIN ECDSA verify
 				pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
@@ -215,7 +202,7 @@ signing:
 					X:     pkX,
 					Y:     pkY,
 				}
-				ok := ecdsa.Verify(&pk, msgData, R.X(), sumS)
+				ok := ecdsa.Verify(&pk, msgData, r, s)
 				assert.True(t, ok, "ecdsa verify must pass")
 				t.Log("ECDSA signing test done.")
 				// END ECDSA verify
@@ -262,7 +249,8 @@ func TestE2EWithHDKeyDerivation(t *testing.T) {
 
 	// init the parties
 	for i := 0; i < len(signPIDs); i++ {
-		params := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		params, err := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
+		assert.NoError(t, err)
 
 		P := NewLocalPartyWithKDD(big.NewInt(42), params, keys[i], keyDerivationDelta, outCh, endCh, 0).(*LocalParty)
 		parties = append(parties, P)
@@ -298,23 +286,15 @@ signing:
 				go updater(parties[dest[0].Index], msg, errCh)
 			}
 
-		case <-endCh:
+		case sigData := <-endCh:
 			atomic.AddInt32(&ended, 1)
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 				t.Logf("Done. Received signature data from %d participants", ended)
-				R := parties[0].temp.bigR
-				r := parties[0].temp.rx
-				fmt.Printf("sign result: R(%s, %s), r=%s\n", R.X().String(), R.Y().String(), r.String())
 
-				modN := common.ModInt(tss.S256().Params().N)
-
-				// BEGIN check s correctness
-				sumS := big.NewInt(0)
-				for _, p := range parties {
-					sumS = modN.Add(sumS, p.temp.si)
-				}
-				fmt.Printf("S: %s\n", sumS.String())
-				// END check s correctness
+				// Use the finalized signature output (not internal temp state, which is cleared for security)
+				r := new(big.Int).SetBytes(sigData.R)
+				s := new(big.Int).SetBytes(sigData.S)
+				fmt.Printf("sign result: r=%s, s=%s\n", r.String(), s.String())
 
 				// BEGIN ECDSA verify
 				pkX, pkY := keys[0].ECDSAPub.X(), keys[0].ECDSAPub.Y()
@@ -323,7 +303,7 @@ signing:
 					X:     pkX,
 					Y:     pkY,
 				}
-				ok := ecdsa.Verify(&pk, big.NewInt(42).Bytes(), R.X(), sumS)
+				ok := ecdsa.Verify(&pk, big.NewInt(42).Bytes(), r, s)
 				assert.True(t, ok, "ecdsa verify must pass")
 				t.Log("ECDSA signing test done.")
 				// END ECDSA verify
@@ -340,6 +320,24 @@ func TestFillTo32BytesInPlace(t *testing.T) {
 	assert.True(t, big.NewInt(0).SetBytes(normalizedS).Cmp(s) == 0)
 	assert.Equal(t, 32, len(normalizedS))
 	assert.NotEqual(t, 32, len(s.Bytes()))
+}
+
+func TestPadToLengthBytesInPlaceZerosOriginal(t *testing.T) {
+	src := []byte{0x01, 0x02, 0x03}
+	result := padToLengthBytesInPlace(src, 5)
+	assert.Equal(t, 5, len(result))
+	assert.Equal(t, []byte{0x00, 0x00, 0x01, 0x02, 0x03}, result)
+	// original src bytes should be zeroed
+	for _, b := range src {
+		assert.Equal(t, byte(0), b, "original src byte should be zeroed")
+	}
+}
+
+func TestPadToLengthBytesInPlaceNoOp(t *testing.T) {
+	src := []byte{0x01, 0x02, 0x03, 0x04, 0x05}
+	result := padToLengthBytesInPlace(src, 3)
+	assert.Equal(t, 5, len(result))
+	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04, 0x05}, result)
 }
 
 func fillBytes(x *big.Int, buf []byte) []byte {

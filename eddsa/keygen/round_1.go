@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
@@ -10,11 +11,11 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	cmts "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	cmts "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 var zero = big.NewInt(0)
@@ -46,6 +47,9 @@ func (round *round1) Start() *tss.Error {
 
 	// 1. calculate "partial" key share ui
 	ui := common.GetRandomPositiveInt(round.PartialKeyRand(), round.Params().EC().Params().N)
+	if ui == nil {
+		return round.WrapError(errors.New("failed to generate random ui"))
+	}
 	round.temp.ui = ui
 
 	// 2. compute the vss shares
@@ -56,9 +60,7 @@ func (round *round1) Start() *tss.Error {
 	}
 	round.save.Ks = ids
 
-	// security: the original u_i may be discarded
-	ui = zero // clears the secret data from memory
-	_ = ui    // silences a linter warning
+	// security: round.temp.ui will be cleared in the final round's Clear()
 
 	// 3. make commitment -> (C, D)
 	pGFlat, err := crypto.FlattenECPoints(vs)

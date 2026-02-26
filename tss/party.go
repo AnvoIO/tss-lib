@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
+	"github.com/AnvoIO/tss-lib/v3/common"
 )
 
 type Party interface {

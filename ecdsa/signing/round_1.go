@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -11,12 +12,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/mta"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/mta"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 var zero = big.NewInt(0)
@@ -37,7 +38,7 @@ func (round *round1) Start() *tss.Error {
 	// but considered different blockchain use different hash function we accept the converted big.Int
 	// if this big.Int is not belongs to Zq, the client might not comply with common rule (for ECDSA):
 	// https://github.com/btcsuite/btcd/blob/c26ffa870fd817666a857af1bf6498fabba1ffe3/btcec/signature.go#L263
-	if round.temp.m.Cmp(round.Params().EC().Params().N) >= 0 {
+	if round.temp.m.Sign() < 0 || round.temp.m.Cmp(round.Params().EC().Params().N) >= 0 {
 		return round.WrapError(errors.New("hashed message is not valid"))
 	}
 
@@ -52,7 +53,13 @@ func (round *round1) Start() *tss.Error {
 	round.temp.ssid = ssid
 
 	k := common.GetRandomPositiveInt(round.Rand(), round.EC().Params().N)
+	if k == nil {
+		return round.WrapError(errors.New("failed to generate random k"))
+	}
 	gamma := common.GetRandomPositiveInt(round.Rand(), round.EC().Params().N)
+	if gamma == nil {
+		return round.WrapError(errors.New("failed to generate random gamma"))
+	}
 
 	pointGamma := crypto.ScalarBaseMult(round.Params().EC(), gamma)
 	cmt := commitments.NewHashCommitment(round.Rand(), pointGamma.X(), pointGamma.Y())
@@ -138,7 +145,10 @@ func (round *round1) prepare() error {
 	if round.Threshold()+1 > len(ks) {
 		return fmt.Errorf("t+1=%d is not satisfied by the key count of %d", round.Threshold()+1, len(ks))
 	}
-	wi, bigWs := PrepareForSigning(round.Params().EC(), i, len(ks), xi, ks, bigXs)
+	wi, bigWs, err := PrepareForSigning(round.Params().EC(), i, len(ks), xi, ks, bigXs)
+	if err != nil {
+		return err
+	}
 
 	round.temp.w = wi
 	round.temp.bigWs = bigWs

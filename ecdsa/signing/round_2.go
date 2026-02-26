@@ -13,8 +13,8 @@ import (
 
 	errorspkg "github.com/pkg/errors"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/mta"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/crypto/mta"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *round2) Start() *tss.Error {

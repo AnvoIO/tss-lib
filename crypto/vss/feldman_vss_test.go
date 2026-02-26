@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package vss_test
 
@@ -13,9 +14,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	. "github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	. "github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func TestCheckIndexesDup(t *testing.T) {
@@ -114,4 +115,24 @@ func TestReconstruct(t *testing.T) {
 	secret4, err4 := shares[:num].ReConstruct(tss.EC())
 	assert.NoError(t, err4)
 	assert.NotZero(t, secret4)
+}
+
+func TestReconstructDuplicateIDs(t *testing.T) {
+	num, threshold := 5, 3
+
+	secret := common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N)
+
+	ids := make([]*big.Int, 0)
+	for i := 0; i < num; i++ {
+		ids = append(ids, common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N))
+	}
+
+	_, shares, err := Create(tss.EC(), threshold, secret, ids, rand.Reader)
+	assert.NoError(t, err)
+
+	// Create a set with duplicate share IDs
+	dupShares := Shares{shares[0], shares[1], shares[2], shares[0]} // shares[0] duplicated
+	dupShares[0] = &Share{Threshold: threshold, ID: shares[0].ID, Share: shares[0].Share}
+	_, err = dupShares.ReConstruct(tss.EC())
+	assert.Error(t, err, "ReConstruct should fail with duplicate share IDs")
 }

@@ -1,4 +1,4 @@
-module github.com/bnb-chain/tss-lib/v2
+module github.com/AnvoIO/tss-lib/v3
 
 go 1.16
 

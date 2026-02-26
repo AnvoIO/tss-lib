@@ -1,12 +1,14 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package common
 
 import (
+	"fmt"
 	"math/big"
 )
 
@@ -53,6 +55,15 @@ func (mi *modInt) Exp(x, y *big.Int) *big.Int {
 
 func (mi *modInt) ModInverse(g *big.Int) *big.Int {
 	return new(big.Int).ModInverse(g, mi.i())
+}
+
+// ModInverseChecked wraps ModInverse with a nil check. Returns an error if g is not invertible mod mi.
+func (mi *modInt) ModInverseChecked(g *big.Int) (*big.Int, error) {
+	result := new(big.Int).ModInverse(g, mi.i())
+	if result == nil {
+		return nil, fmt.Errorf("ModInverse: element %v is not invertible mod %v", g, mi.i())
+	}
+	return result, nil
 }
 
 func (mi *modInt) i() *big.Int {

@@ -21,4 +21,8 @@ vendor
 !.idea/codeStyles/
 *.swp
 .vscode/*.json
+.claude/
+.cursor/
+.codex/
+.gemini/
 
