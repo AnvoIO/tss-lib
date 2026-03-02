@@ -122,9 +122,9 @@ func (publicKey *PublicKey) EncryptAndReturnRandomness(rand io.Reader, m *big.In
 	x = common.GetRandomPositiveRelativelyPrimeInt(rand, publicKey.N)
 	N2 := publicKey.NSquare()
 	// 1. gamma^m mod N2
-	Gm := new(big.Int).Exp(publicKey.Gamma(), m, N2)
+	Gm := common.ModInt(N2).Exp(publicKey.Gamma(), m)
 	// 2. x^N mod N2
-	xN := new(big.Int).Exp(x, publicKey.N, N2)
+	xN := common.ModInt(N2).Exp(x, publicKey.N)
 	// 3. (1) * (2) mod N2
 	c = common.ModInt(N2).Mul(Gm, xN)
 	return
@@ -185,11 +185,11 @@ func (privateKey *PrivateKey) Decrypt(c *big.Int) (m *big.Int, err error) {
 		return nil, ErrMessageMalFormed
 	}
 	// 1. L(u) = (c^LambdaN-1 mod N2) / N
-	Lc := L(new(big.Int).Exp(c, privateKey.LambdaN, N2), privateKey.N)
+	Lc := L(common.ModInt(N2).Exp(c, privateKey.LambdaN), privateKey.N)
 	// 2. L(u) = (Gamma^LambdaN-1 mod N2) / N
-	Lg := L(new(big.Int).Exp(privateKey.Gamma(), privateKey.LambdaN, N2), privateKey.N)
-	// 3. (1) * modInv(2) mod N
-	inv := new(big.Int).ModInverse(Lg, privateKey.N)
+	Lg := L(common.ModInt(N2).Exp(privateKey.Gamma(), privateKey.LambdaN), privateKey.N)
+	// 3. (1) * modInv(2) mod N — CT inverse using known totient (Paillier decryption hot path)
+	inv := common.ModInt(privateKey.N).ModInverseWithTotient(Lg, privateKey.PhiN)
 	if inv == nil {
 		return nil, fmt.Errorf("L(g^lambda) is not invertible mod N")
 	}
@@ -208,11 +208,13 @@ func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) (Proo
 	iters := ProofIters
 	xs := GenerateXs(iters, k, privateKey.N, ecdsaPub)
 	for i := 0; i < iters; i++ {
-		M := new(big.Int).ModInverse(privateKey.N, privateKey.PhiN)
+		// PhiN is even so ModInverse falls back to non-CT math/big.
+		// This is a one-time keygen/proof operation with low exposure surface.
+		M := common.ModInt(privateKey.PhiN).ModInverse(privateKey.N)
 		if M == nil {
 			return pi, fmt.Errorf("N is not invertible mod PhiN")
 		}
-		pi[i] = new(big.Int).Exp(xs[i], M, privateKey.N)
+		pi[i] = common.ModInt(privateKey.N).Exp(xs[i], M)
 	}
 	return pi, nil
 }
