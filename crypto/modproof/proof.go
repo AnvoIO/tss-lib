@@ -52,7 +52,9 @@ func NewProof(Session []byte, N, P, Q *big.Int, rand io.Reader) (*ProofMod, erro
 
 	// Fig 16.3
 	modN, modPhi := common.ModInt(N), common.ModInt(Phi)
-	invN := new(big.Int).ModInverse(N, Phi)
+	// Phi is even so ModInverse falls back to non-CT math/big.
+	// This is a keygen-time operation, not the signing hot path.
+	invN := common.ModInt(Phi).ModInverse(N)
 	if invN == nil {
 		return nil, fmt.Errorf("N is not invertible mod Phi")
 	}
