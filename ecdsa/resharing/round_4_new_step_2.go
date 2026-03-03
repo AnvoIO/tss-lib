@@ -93,14 +93,14 @@ func (round *round4) Start() *tss.Error {
 		}(j, msg, r2msg1)
 		_j := j
 		_msg := msg
-		dlnVerifier.VerifyDLNProof1(r2msg1, H1j, H2j, NTildej, func(isValid bool) {
+		dlnVerifier.VerifyDLNProof1(round.temp.ssid, r2msg1, H1j, H2j, NTildej, func(isValid bool) {
 			if !isValid {
 				dlnProof1FailCulprits[_j] = _msg.GetFrom()
 				common.Logger.Warningf("dln proof 1 verify failed for party %s", _msg.GetFrom())
 			}
 			wg.Done()
 		})
-		dlnVerifier.VerifyDLNProof2(r2msg1, H2j, H1j, NTildej, func(isValid bool) {
+		dlnVerifier.VerifyDLNProof2(round.temp.ssid, r2msg1, H2j, H1j, NTildej, func(isValid bool) {
 			if !isValid {
 				dlnProof2FailCulprits[_j] = _msg.GetFrom()
 				common.Logger.Warningf("dln proof 2 verify failed for party %s", _msg.GetFrom())

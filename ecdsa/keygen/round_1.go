@@ -89,17 +89,6 @@ func (round *round1) Start() *tss.Error {
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
 
-	// generate the dlnproofs for keygen
-	h1i, h2i, alpha, beta, p, q, NTildei := preParams.H1i,
-		preParams.H2i,
-		preParams.Alpha,
-		preParams.Beta,
-		preParams.P,
-		preParams.Q,
-		preParams.NTildei
-	dlnProof1 := dlnproof.NewDLNProof(h1i, h2i, alpha, p, q, NTildei, round.Rand())
-	dlnProof2 := dlnproof.NewDLNProof(h2i, h1i, beta, p, q, NTildei, round.Rand())
-
 	// for this P: SAVE
 	// - shareID
 	// and keep in temporary storage:
@@ -114,6 +103,17 @@ func (round *round1) Start() *tss.Error {
 	}
 	round.temp.ssid = ssid
 	round.temp.shares = shares
+
+	// generate the dlnproofs for keygen
+	h1i, h2i, alpha, beta, p, q, NTildei := preParams.H1i,
+		preParams.H2i,
+		preParams.Alpha,
+		preParams.Beta,
+		preParams.P,
+		preParams.Q,
+		preParams.NTildei
+	dlnProof1 := dlnproof.NewDLNProof(round.temp.ssid, h1i, h2i, alpha, p, q, NTildei, round.Rand())
+	dlnProof2 := dlnproof.NewDLNProof(round.temp.ssid, h2i, h1i, beta, p, q, NTildei, round.Rand())
 
 	// for this P: SAVE de-commitments, paillier keys for round 2
 	round.save.PaillierSK = preParams.PaillierSK

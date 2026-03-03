@@ -75,7 +75,11 @@ func (round *round1) Start() *tss.Error {
 		if j == i {
 			continue
 		}
-		cA, pi, err := mta.AliceInit(round.Params().EC(), round.key.PaillierPKs[i], k, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.Rand())
+		// Use ssid + j (receiver's index) as Session context so that the verifier (party j)
+		// can reconstruct the same challenge using their ContextI = ssid + j in round 2.
+		ContextJ := append([]byte(nil), round.temp.ssid...)
+		ContextJ = append(ContextJ, new(big.Int).SetUint64(uint64(j)).Bytes()...)
+		cA, pi, err := mta.AliceInit(ContextJ, round.Params().EC(), round.key.PaillierPKs[i], k, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.Rand())
 		if err != nil {
 			return round.WrapError(fmt.Errorf("failed to init mta: %v", err))
 		}

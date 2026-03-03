@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package mta
 
@@ -18,6 +19,7 @@ import (
 )
 
 func AliceInit(
+	Session []byte,
 	ec elliptic.Curve,
 	pkA *paillier.PublicKey,
 	a, NTildeB, h1B, h2B *big.Int,
@@ -27,7 +29,7 @@ func AliceInit(
 	if err != nil {
 		return nil, nil, err
 	}
-	pf, err = ProveRangeAlice(ec, pkA, cA, NTildeB, h1B, h2B, a, rA, rand)
+	pf, err = ProveRangeAlice(Session, ec, pkA, cA, NTildeB, h1B, h2B, a, rA, rand)
 	return cA, pf, err
 }
 
@@ -39,7 +41,7 @@ func BobMid(
 	b, cA, NTildeA, h1A, h2A, NTildeB, h1B, h2B *big.Int,
 	rand io.Reader,
 ) (beta, cB, betaPrm *big.Int, piB *ProofBob, err error) {
-	if !pf.Verify(ec, pkA, NTildeB, h1B, h2B, cA) {
+	if !pf.Verify(Session, ec, pkA, NTildeB, h1B, h2B, cA) {
 		err = errors.New("RangeProofAlice.Verify() returned false")
 		return
 	}
@@ -74,7 +76,7 @@ func BobMidWC(
 	B *crypto.ECPoint,
 	rand io.Reader,
 ) (beta, cB, betaPrm *big.Int, piB *ProofBobWC, err error) {
-	if !pf.Verify(ec, pkA, NTildeB, h1B, h2B, cA) {
+	if !pf.Verify(Session, ec, pkA, NTildeB, h1B, h2B, cA) {
 		err = errors.New("RangeProofAlice.Verify() returned false")
 		return
 	}
