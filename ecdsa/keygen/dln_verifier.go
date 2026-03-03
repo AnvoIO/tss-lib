@@ -35,6 +35,7 @@ func NewDlnProofVerifier(concurrency int) *DlnProofVerifier {
 }
 
 func (dpv *DlnProofVerifier) VerifyDLNProof1(
+	Session []byte,
 	m message,
 	h1, h2, n *big.Int,
 	onDone func(bool),
@@ -49,11 +50,12 @@ func (dpv *DlnProofVerifier) VerifyDLNProof1(
 			return
 		}
 
-		onDone(dlnProof.Verify(h1, h2, n))
+		onDone(dlnProof.Verify(Session, h1, h2, n))
 	}()
 }
 
 func (dpv *DlnProofVerifier) VerifyDLNProof2(
+	Session []byte,
 	m message,
 	h1, h2, n *big.Int,
 	onDone func(bool),
@@ -68,6 +70,6 @@ func (dpv *DlnProofVerifier) VerifyDLNProof2(
 			return
 		}
 
-		onDone(dlnProof.Verify(h1, h2, n))
+		onDone(dlnProof.Verify(Session, h1, h2, n))
 	}()
 }

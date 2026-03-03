@@ -88,8 +88,8 @@ func (round *round2) Start() *tss.Error {
 		preParams.P,
 		preParams.Q,
 		preParams.NTildei
-	dlnProof1 := dlnproof.NewDLNProof(h1i, h2i, alpha, p, q, NTildei, round.Rand())
-	dlnProof2 := dlnproof.NewDLNProof(h2i, h1i, beta, p, q, NTildei, round.Rand())
+	dlnProof1 := dlnproof.NewDLNProof(round.temp.ssid, h1i, h2i, alpha, p, q, NTildei, round.Rand())
+	dlnProof2 := dlnproof.NewDLNProof(round.temp.ssid, h2i, h1i, beta, p, q, NTildei, round.Rand())
 
 	modProof := &modproof.ProofMod{W: zero, X: *new([80]*big.Int), A: zero, B: zero, Z: *new([80]*big.Int)}
 	ContextI := append(round.temp.ssid, big.NewInt(int64(i)).Bytes()...)
