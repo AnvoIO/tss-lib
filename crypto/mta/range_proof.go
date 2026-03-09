@@ -110,6 +110,12 @@ func (pf *RangeProofAlice) Verify(Session []byte, ec elliptic.Curve, pk *paillie
 	if pf == nil || !pf.ValidateBasic() || pk == nil || NTilde == nil || h1 == nil || h2 == nil || c == nil {
 		return false
 	}
+	// Reject c where gcd(c, N) != 1 to prevent nil pointer dereference from c^(-e) in modular exponentiation.
+	// When gcd(c, N) != 1, the modular inverse doesn't exist and big.Int.Exp returns nil.
+	// This also covers the c == 0 case.
+	if new(big.Int).GCD(nil, nil, c, pk.N).Cmp(one) != 0 {
+		return false
+	}
 
 	q := ec.Params().N
 	q3 := new(big.Int).Mul(q, q)
