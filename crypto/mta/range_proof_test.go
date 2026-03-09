@@ -123,3 +123,82 @@ func TestProveRangeAliceBypassed(t *testing.T) {
 	fmt.Println("Did verify proof bogus with data from bogus?", ok2)
 	fmt.Println("Did we bypass proof 3?", bypassresult3)
 }
+
+// TestVerifyRejectsCNotCoprime verifies that Verify rejects ciphertexts
+// where gcd(c, N) != 1, which would cause a nil-pointer panic in c^(-e).
+func TestVerifyRejectsCNotCoprime(t *testing.T) {
+	q := tss.EC().Params().N
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	sk, pk, err := paillier.GenerateKeyPair(ctx, rand.Reader, testPaillierKeyLength)
+	assert.NoError(t, err)
+
+	m := common.GetRandomPositiveInt(rand.Reader, q)
+	c, r, err := sk.EncryptAndReturnRandomness(rand.Reader, m)
+	assert.NoError(t, err)
+
+	primes := [2]*big.Int{common.GetRandomPrimeInt(rand.Reader, testSafePrimeBits), common.GetRandomPrimeInt(rand.Reader, testSafePrimeBits)}
+	NTildei, h1i, h2i, err := crypto.GenerateNTildei(rand.Reader, primes)
+	assert.NoError(t, err)
+
+	// Create a valid proof with the real ciphertext
+	proof, err := ProveRangeAlice(Session, tss.EC(), pk, c, NTildei, h1i, h2i, m, r, rand.Reader)
+	assert.NoError(t, err)
+
+	// Verify with c = 0 (gcd(0, N) = N != 1)
+	ok := proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, big.NewInt(0))
+	assert.False(t, ok, "verify must reject c = 0")
+
+	// Verify with c = N (gcd(N, N) = N != 1)
+	ok = proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, pk.N)
+	assert.False(t, ok, "verify must reject c = N")
+
+	// Verify with c = 2*N (gcd(2N, N) = N != 1)
+	twoN := new(big.Int).Mul(big.NewInt(2), pk.N)
+	ok = proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, twoN)
+	assert.False(t, ok, "verify must reject c that is a multiple of N")
+
+	// Verify with c = P (a factor of N, gcd(P, N) = P != 1) — adversarial
+	// We can't extract P from the public key, but we can use N itself as c.
+	// Also test with a known-bad value that shares a factor.
+	ok = proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, new(big.Int).Set(pk.N))
+	assert.False(t, ok, "verify must reject c = N (shares factor)")
+}
+
+// TestVerifyRejectsCNilPanic ensures no panic occurs with adversarial c values
+// that would previously cause nil pointer dereference in big.Int.Exp.
+func TestVerifyRejectsCNilPanic(t *testing.T) {
+	q := tss.EC().Params().N
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+
+	sk, pk, err := paillier.GenerateKeyPair(ctx, rand.Reader, testPaillierKeyLength)
+	assert.NoError(t, err)
+
+	m := common.GetRandomPositiveInt(rand.Reader, q)
+	c, r, err := sk.EncryptAndReturnRandomness(rand.Reader, m)
+	assert.NoError(t, err)
+
+	primes := [2]*big.Int{common.GetRandomPrimeInt(rand.Reader, testSafePrimeBits), common.GetRandomPrimeInt(rand.Reader, testSafePrimeBits)}
+	NTildei, h1i, h2i, err := crypto.GenerateNTildei(rand.Reader, primes)
+	assert.NoError(t, err)
+
+	proof, err := ProveRangeAlice(Session, tss.EC(), pk, c, NTildei, h1i, h2i, m, r, rand.Reader)
+	assert.NoError(t, err)
+
+	// These should NOT panic — the GCD check catches them before the Exp call
+	assert.NotPanics(t, func() {
+		proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, big.NewInt(0))
+	}, "must not panic on c = 0")
+
+	assert.NotPanics(t, func() {
+		proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, pk.N)
+	}, "must not panic on c = N")
+
+	assert.NotPanics(t, func() {
+		proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, pk.NSquare())
+	}, "must not panic on c = N^2")
+}
