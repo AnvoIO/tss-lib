@@ -45,7 +45,13 @@ func (round *round1) Start() *tss.Error {
 	round.number = 1
 	round.started = true
 	round.resetOK()
-	round.temp.ssidNonce = new(big.Int).SetUint64(0)
+	// GG20 session binding: use caller-provided session nonce if available,
+	// otherwise fall back to the message hash for per-session SSID uniqueness.
+	if nonce := round.Params().SessionNonce(); nonce != nil {
+		round.temp.ssidNonce = new(big.Int).Set(nonce)
+	} else {
+		round.temp.ssidNonce = new(big.Int).Set(round.temp.m)
+	}
 	ssid, err := round.getSSID()
 	if err != nil {
 		return round.WrapError(err)
