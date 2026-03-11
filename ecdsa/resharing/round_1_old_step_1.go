@@ -47,7 +47,15 @@ func (round *round1) Start() *tss.Error {
 		round.allOldOK()
 	}
 
-	round.temp.ssidNonce = new(big.Int).SetUint64(uint64(0))
+	// GG20 session binding: use caller-provided session nonce if available.
+	// For resharing, all parties must agree on the nonce via external coordination
+	// (e.g., coordinator-assigned session ID) since no shared session-unique
+	// value is available within the protocol itself.
+	if nonce := round.Params().SessionNonce(); nonce != nil {
+		round.temp.ssidNonce = new(big.Int).Set(nonce)
+	} else {
+		round.temp.ssidNonce = new(big.Int).SetUint64(0)
+	}
 	ssid, err := round.getSSID()
 	if err != nil {
 		return round.WrapError(err)
