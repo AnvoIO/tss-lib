@@ -10,8 +10,8 @@ import (
 	"crypto/sha512"
 	"math/big"
 
-	"github.com/agl/ed25519/edwards25519"
 	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/agl/ed25519/edwards25519"
 	"github.com/pkg/errors"
 
 	"github.com/AnvoIO/tss-lib/v3/crypto"
