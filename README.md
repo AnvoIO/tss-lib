@@ -7,7 +7,7 @@
 
 A Go implementation of multi-party {t,n}-threshold ECDSA and EdDSA signature schemes based on Gennaro and Goldfeder CCS 2018 [1]. Provides distributed key generation, signing, and dynamic group re-sharing with no trusted dealer.
 
-Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security hardening, constant-time arithmetic, and session-bound Fiat-Shamir challenges.
+Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security hardening, constant-time arithmetic, session-bound Fiat-Shamir challenges, and VSS correctness fixes.
 
 ## Features
 
@@ -15,11 +15,13 @@ Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security
 - **EdDSA threshold signatures** -- Edwards-curve variant following the same approach
 - **Distributed key generation** -- no trusted dealer, each party holds one secret share
 - **Dynamic re-sharing** -- change the group of participants while preserving the key
+- **Constant-time arithmetic** -- centralized via `filippo.io/bigmod` to prevent timing side channels
+- **Session-bound proofs** -- all Fiat-Shamir challenges bound to protocol SSID, preventing cross-session replay
 - **Paillier, DLN, range, and factor proofs** -- with optional build-tag disable for testing (`-tags insecure_noproofs`)
 
 ## Requirements
 
-- Go 1.20+
+- Go 1.23+
 - Protocol Buffers compiler (for regenerating wire format, not required to build)
 
 ## Building
@@ -135,7 +137,7 @@ All parties in a session **must** run the same version.
 ```
 tss-lib/
   tss/              Core types: Party, Parameters, PartyID, message routing
-  common/           Shared utilities, hash functions
+  common/           Shared utilities, constant-time ModInt (bigmod), hash functions
   crypto/            Elliptic curve helpers, Paillier, commitments, proofs
     dlnproof/       Dlog-based non-interactive proofs
     facproof/       Factor proofs
