@@ -794,14 +794,14 @@ These findings were discovered after the main February 24, 2026 report publicati
 | Base | `main` (`dd6f9f0`) |
 | Reviewed Branch (pre-squash) | `security-review` (`690f45a`) |
 | Intermediate Checkpoint (pre-squash) | `1c65ae6` (clean-worktree checkpoint before final closure patch set) |
-| Canonical Merge Reference | GitLab MR `!1` (`https://gitlab.com/libre-chain/tss-lib/-/merge_requests/1`) |
-| Post-Merge Canonical Commit | `TBD at merge time` (use squash commit SHA on `main`) |
-| Inputs | MR 1 diff + this full audit report + independent secondary review + supplemental review + final closure patch set |
+| Canonical Merge Reference | `https://github.com/AnvoIO/tss-lib` |
+| Post-Merge Canonical Commit | `e230d0c` (canonical commit on `main`) |
+| Inputs | MR 1 diff + this full audit report + independent secondary review + final closure patch set |
 | **Audit and Fixes By** | Robert Capps - Stratovera LLC \<robert@stratovera.io\> |
 
 ### A.2 Executive Summary
 
-The follow-up and supplemental reviews identified nine additional issues beyond the 13 findings in the main body (`C1..L3`).
+The follow-up and secondary reviews identified nine additional issues beyond the 13 findings in the main body (`C1..L3`).
 All nine additional issues (`F1..F6`, `S1..S3`) are remediated in the current patched branch with targeted regression coverage.
 `F1..F4` were identified on 2026-02-25; `F5..F6` were identified on 2026-02-26 during a secondary review; `S1..S3` were finalized on 2026-02-26 during reconciliation of supplemental findings against code.
 Commit hashes referenced in this appendix are pre-squash branch context and should be interpreted together with MR `!1`; after squash merge, the canonical immutable code reference is the squash commit on `main`.
