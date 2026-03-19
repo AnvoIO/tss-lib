@@ -118,12 +118,17 @@ The transport layer is your responsibility. You must provide:
 
 `PaillierSK.P` and `PaillierSK.Q` fields were added. Key vaults from v1.x must be regenerated via re-sharing.
 
-### v3.0: Security hardening
+### v3.0: Security hardening and session context
 
 - Module path changed from `github.com/bnb-chain/tss-lib/v2` to `github.com/AnvoIO/tss-lib/v3`
 - `tss.NewParameters()` and `tss.NewReSharingParameters()` now return `error`
 - `PrepareForSigning()` (ECDSA/EdDSA) now returns `error`
 - `SetNoProofMod()` / `SetNoProofFac()` blocked unless built with `-tags insecure_noproofs`
+- DLN proof, MTA range proof, and Alice init functions now require `Session []byte` as first parameter
+- Proof hashes include additional inputs (`NTilde`, `h1`, `h2`) and use tagged hashing -- wire-incompatible with v2
+- `vss.Shares.ReConstruct()` correctly requires `threshold + 1` shares (was silently wrong with `threshold`)
+
+All parties in a session **must** run the same version.
 
 ## Project structure
 
