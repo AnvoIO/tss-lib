@@ -8,12 +8,12 @@
 package ckd
 
 import (
-	"bytes"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/sha512"
+	"crypto/subtle"
 	"encoding/binary"
 	"errors"
 	"hash"
@@ -65,6 +65,11 @@ const (
 
 // Extended public key serialization, defined in BIP32
 func (k *ExtendedKey) String() string {
+	if k == nil ||
+		k.PublicKey.X == nil || k.PublicKey.Y == nil ||
+		len(k.Version) != 4 || len(k.ParentFP) != 4 || len(k.ChainCode) != 32 {
+		return ""
+	}
 	// version(4) || depth(1) || parentFP (4) || childinde(4) || chaincode (32) || key(33) || checksum(4)
 	var childNumBytes [4]byte
 	binary.BigEndian.PutUint32(childNumBytes[:], k.ChildIndex)
@@ -85,6 +90,9 @@ func (k *ExtendedKey) String() string {
 
 // NewExtendedKeyFromString returns a new extended key from a base58-encoded extended key
 func NewExtendedKeyFromString(key string, curve elliptic.Curve) (*ExtendedKey, error) {
+	if curve == nil {
+		return nil, errors.New("invalid extended key")
+	}
 	// version(4) || depth(1) || parentFP (4) || childinde(4) || chaincode (32) || key(33) || checksum(4)
 
 	decoded := base58.Decode(key)
@@ -96,7 +104,7 @@ func NewExtendedKeyFromString(key string, curve elliptic.Curve) (*ExtendedKey, e
 	payload := decoded[:len(decoded)-4]
 	checkSum := decoded[len(decoded)-4:]
 	expectedCheckSum := doubleHashB(payload)[:4]
-	if !bytes.Equal(checkSum, expectedCheckSum) {
+	if subtle.ConstantTimeCompare(checkSum, expectedCheckSum) != 1 {
 		return nil, errors.New("invalid extended key")
 	}
 
@@ -122,6 +130,9 @@ func NewExtendedKeyFromString(key string, curve elliptic.Curve) (*ExtendedKey, e
 		}
 	} else {
 		px, py := elliptic.Unmarshal(curve, keyData)
+		if px == nil || py == nil {
+			return nil, errors.New("invalid extended key")
+		}
 		pubKey = ecdsa.PublicKey{
 			Curve: curve,
 			X:     px,

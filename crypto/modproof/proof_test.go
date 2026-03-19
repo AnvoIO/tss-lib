@@ -9,6 +9,7 @@ package modproof_test
 
 import (
 	"crypto/rand"
+	"fmt"
 	"math/big"
 	"testing"
 	"time"
