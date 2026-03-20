@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
@@ -11,10 +12,10 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	cmt "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	cmt "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // Implements Party
@@ -70,12 +71,12 @@ func NewLocalParty(
 	// when `optionalPreParams` is provided we'll use the pre-computed primes instead of generating them from scratch
 	if 0 < len(optionalPreParams) {
 		if 1 < len(optionalPreParams) {
-			panic(errors.New("keygen.NewLocalParty expected 0 or 1 item in `optionalPreParams`"))
+			common.Logger.Errorf("keygen.NewLocalParty received %d optional pre-params; expected at most 1, ignoring all", len(optionalPreParams))
+		} else if !optionalPreParams[0].ValidateWithProof() {
+			common.Logger.Error("keygen.NewLocalParty received invalid optional pre-params; ignoring provided value")
+		} else {
+			data.LocalPreParams = optionalPreParams[0]
 		}
-		if !optionalPreParams[0].ValidateWithProof() {
-			panic(errors.New("`optionalPreParams` failed to validate; it might have been generated with an older version of tss-lib"))
-		}
-		data.LocalPreParams = optionalPreParams[0]
 	}
 	p := &LocalParty{
 		BaseParty: new(tss.BaseParty),
@@ -150,6 +151,20 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+// Clear zeros sensitive data in temp storage to reduce the window of exposure.
+func (td *localTempData) Clear() {
+	if td.ui != nil {
+		td.ui.SetInt64(0)
+	}
+	if td.shares != nil {
+		for _, s := range td.shares {
+			if s != nil && s.Share != nil {
+				s.Share.SetInt64(0)
+			}
+		}
+	}
 }
 
 // recovers a party's original index in the set of parties during keygen

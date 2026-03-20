@@ -10,10 +10,10 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/eddsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 const (

@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package paillier_test
 
@@ -15,10 +16,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	. "github.com/bnb-chain/tss-lib/v2/crypto/paillier"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	. "github.com/AnvoIO/tss-lib/v3/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // Using a modulus length of 2048 is recommended in the GG18 spec
@@ -49,6 +50,21 @@ func TestGenerateKeyPair(t *testing.T) {
 	assert.NotZero(t, publicKey)
 	assert.NotZero(t, privateKey)
 	t.Log(privateKey)
+}
+
+func TestGenerateKeyPairOptionalConcurrencyValidation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	sk, pk, err := GenerateKeyPair(ctx, rand.Reader, testPaillierKeyLength, 1, 2)
+	assert.Error(t, err)
+	assert.Nil(t, sk)
+	assert.Nil(t, pk)
+
+	sk, pk, err = GenerateKeyPair(ctx, rand.Reader, testPaillierKeyLength, 0)
+	assert.Error(t, err)
+	assert.Nil(t, sk)
+	assert.Nil(t, pk)
 }
 
 func TestEncrypt(t *testing.T) {
@@ -114,7 +130,8 @@ func TestProofVerify(t *testing.T) {
 	ki := common.MustGetRandomInt(rand.Reader, 256)                     // index
 	ui := common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N) // ECDSA private
 	yX, yY := tss.EC().ScalarBaseMult(ui.Bytes())                       // ECDSA public
-	proof := privateKey.Proof(ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	proof, err := privateKey.Proof(ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	assert.NoError(t, err)
 	res, err := proof.Verify(publicKey.N, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
 	assert.NoError(t, err)
 	assert.True(t, res, "proof verify result must be true")
@@ -125,7 +142,8 @@ func TestProofVerifyFail(t *testing.T) {
 	ki := common.MustGetRandomInt(rand.Reader, 256)                     // index
 	ui := common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N) // ECDSA private
 	yX, yY := tss.EC().ScalarBaseMult(ui.Bytes())                       // ECDSA public
-	proof := privateKey.Proof(ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	proof, err := privateKey.Proof(ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	assert.NoError(t, err)
 	last := proof[len(proof)-1]
 	last.Sub(last, big.NewInt(1))
 	res, err := proof.Verify(publicKey.N, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))

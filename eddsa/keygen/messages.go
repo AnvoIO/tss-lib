@@ -10,12 +10,12 @@ import (
 	"crypto/elliptic"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	cmt "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/schnorr"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	cmt "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/schnorr"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // These messages were generated from Protocol Buffers definitions into eddsa-keygen.pb.go

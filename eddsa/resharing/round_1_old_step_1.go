@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package resharing
 
@@ -10,12 +11,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/eddsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/eddsa/signing"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/signing"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // round 1 represents round 1 of the keygen part of the EDDSA TSS spec
@@ -48,7 +49,10 @@ func (round *round1) Start() *tss.Error {
 		return round.WrapError(fmt.Errorf("t+1=%d is not satisfied by the key count of %d", round.Threshold()+1, len(ks)), round.PartyID())
 	}
 	newKs := round.NewParties().IDs().Keys()
-	wi := signing.PrepareForSigning(round.Params().EC(), i, len(round.OldParties().IDs()), xi, ks)
+	wi, err := signing.PrepareForSigning(round.Params().EC(), i, len(round.OldParties().IDs()), xi, ks)
+	if err != nil {
+		return round.WrapError(err, Pi)
+	}
 
 	// 2.
 	vi, shares, err := vss.Create(round.Params().EC(), round.NewThreshold(), wi, newKs, round.Rand())

@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -11,11 +12,11 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/eddsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // round 1 represents round 1 of the signing part of the EDDSA TSS spec
@@ -30,11 +31,21 @@ func (round *round1) Start() *tss.Error {
 		return round.WrapError(errors.New("round already started"))
 	}
 
+	if round.temp.m.Sign() < 0 {
+		return round.WrapError(errors.New("hashed message is not valid"))
+	}
+
 	round.number = 1
 	round.started = true
 	round.resetOK()
 
-	round.temp.ssidNonce = new(big.Int).SetUint64(0)
+	// GG20 session binding: use caller-provided session nonce if available,
+	// otherwise fall back to the message hash for per-session SSID uniqueness.
+	if nonce := round.Params().SessionNonce(); nonce != nil {
+		round.temp.ssidNonce = new(big.Int).Set(nonce)
+	} else {
+		round.temp.ssidNonce = new(big.Int).Set(round.temp.m)
+	}
 	var err error
 	round.temp.ssid, err = round.getSSID()
 	if err != nil {
@@ -42,6 +53,9 @@ func (round *round1) Start() *tss.Error {
 	}
 	// 1. select ri
 	ri := common.GetRandomPositiveInt(round.Rand(), round.Params().EC().Params().N)
+	if ri == nil {
+		return round.WrapError(errors.New("failed to generate random ri"))
+	}
 
 	// 2. make commitment
 	pointRi := crypto.ScalarBaseMult(round.Params().EC(), ri)
@@ -102,7 +116,10 @@ func (round *round1) prepare() error {
 	if round.Threshold()+1 > len(ks) {
 		return fmt.Errorf("t+1=%d is not satisfied by the key count of %d", round.Threshold()+1, len(ks))
 	}
-	wi := PrepareForSigning(round.Params().EC(), i, len(ks), xi, ks)
+	wi, err := PrepareForSigning(round.Params().EC(), i, len(ks), xi, ks)
+	if err != nil {
+		return err
+	}
 
 	round.temp.wi = wi
 	return nil

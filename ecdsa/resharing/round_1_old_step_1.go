@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package resharing
 
@@ -11,12 +12,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/signing"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/signing"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // round 1 represents round 1 of the keygen part of the GG18 ECDSA TSS spec (Gennaro, Goldfeder; 2018)
@@ -38,9 +39,23 @@ func (round *round1) Start() *tss.Error {
 	if !round.ReSharingParams().IsOldCommittee() {
 		return nil
 	}
-	round.allOldOK()
+	// Fix for bnb-chain/tss-lib#128: Only call allOldOK() when the party is
+	// exclusively in the old committee. When a party is in BOTH committees,
+	// premature marking causes round.save.ECDSAPub to remain uninitialized,
+	// leading to nil pointer dereferences in subsequent rounds.
+	if !round.ReSharingParams().IsNewCommittee() {
+		round.allOldOK()
+	}
 
-	round.temp.ssidNonce = new(big.Int).SetUint64(uint64(0))
+	// GG20 session binding: use caller-provided session nonce if available.
+	// For resharing, all parties must agree on the nonce via external coordination
+	// (e.g., coordinator-assigned session ID) since no shared session-unique
+	// value is available within the protocol itself.
+	if nonce := round.Params().SessionNonce(); nonce != nil {
+		round.temp.ssidNonce = new(big.Int).Set(nonce)
+	} else {
+		round.temp.ssidNonce = new(big.Int).SetUint64(0)
+	}
 	ssid, err := round.getSSID()
 	if err != nil {
 		return round.WrapError(err)
@@ -55,7 +70,10 @@ func (round *round1) Start() *tss.Error {
 		return round.WrapError(fmt.Errorf("t+1=%d is not satisfied by the key count of %d", round.Threshold()+1, len(ks)), round.PartyID())
 	}
 	newKs := round.NewParties().IDs().Keys()
-	wi, _ := signing.PrepareForSigning(round.Params().EC(), i, len(round.OldParties().IDs()), xi, ks, bigXj)
+	wi, _, err := signing.PrepareForSigning(round.Params().EC(), i, len(round.OldParties().IDs()), xi, ks, bigXj)
+	if err != nil {
+		return round.WrapError(err, Pi)
+	}
 
 	// 2.
 	vi, shares, err := vss.Create(round.Params().EC(), round.NewThreshold(), wi, newKs, round.Rand())

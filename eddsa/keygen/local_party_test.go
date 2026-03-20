@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
@@ -19,11 +20,11 @@ import (
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/test"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/test"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 const (
@@ -61,7 +62,8 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	// init the parties
 	for i := 0; i < len(pIDs); i++ {
 		var P *LocalParty
-		params := tss.NewParameters(tss.Edwards(), p2pCtx, pIDs[i], len(pIDs), threshold)
+		params, err := tss.NewParameters(tss.Edwards(), p2pCtx, pIDs[i], len(pIDs), threshold)
+		assert.NoError(t, err)
 		if i < len(fixtures) {
 			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
 		} else {
@@ -135,7 +137,8 @@ keygen:
 					assert.NoError(t, err, "vss.ReConstruct should not throw error")
 
 					// uG test: u*G[j] == V[0]
-					assert.Equal(t, uj, Pj.temp.ui)
+					// Note: Pj.temp.ui is zeroed by Clear() after protocol completion (H3 security fix).
+					// We verify correctness via uG == V[0] using the reconstructed uj instead.
 					uG := crypto.ScalarBaseMult(tss.Edwards(), uj)
 					assert.True(t, uG.Equals(Pj.temp.vs[0]), "ensure u*G[j] == V_0")
 
@@ -147,12 +150,12 @@ keygen:
 
 					// fails if threshold cannot be satisfied (bad share)
 					{
-						badShares := pShares[:threshold]
+						badShares := pShares[:threshold+1]
 						badShares[len(badShares)-1].Share.Set(big.NewInt(0))
-						uj, err := pShares[:threshold].ReConstruct(tss.Edwards())
+						badUj, err := pShares[:threshold+1].ReConstruct(tss.Edwards())
 						assert.NoError(t, err)
-						assert.NotEqual(t, parties[j].temp.ui, uj)
-						BigXjX, BigXjY := tss.Edwards().ScalarBaseMult(uj.Bytes())
+						assert.NotEqual(t, uj, badUj)
+						BigXjX, BigXjY := tss.Edwards().ScalarBaseMult(badUj.Bytes())
 						assert.NotEqual(t, BigXjX, Pj.temp.vs[0].X())
 						assert.NotEqual(t, BigXjY, Pj.temp.vs[0].Y())
 					}

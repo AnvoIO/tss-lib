@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package resharing_test
 
@@ -15,13 +16,13 @@ import (
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/eddsa/keygen"
-	. "github.com/bnb-chain/tss-lib/v2/eddsa/resharing"
-	"github.com/bnb-chain/tss-lib/v2/eddsa/signing"
-	"github.com/bnb-chain/tss-lib/v2/test"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
+	. "github.com/AnvoIO/tss-lib/v3/eddsa/resharing"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/signing"
+	"github.com/AnvoIO/tss-lib/v3/test"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 const (
@@ -68,14 +69,16 @@ func TestE2EConcurrent(t *testing.T) {
 
 	// init the old parties first
 	for j, pID := range oldPIDs {
-		params := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
+		params, err := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
+		assert.NoError(t, err)
 		P := NewLocalParty(params, oldKeys[j], outCh, endCh).(*LocalParty) // discard old key data
 		oldCommittee = append(oldCommittee, P)
 	}
 
 	// init the new parties
 	for _, pID := range newPIDs {
-		params := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
+		params, err := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
+		assert.NoError(t, err)
 		save := keygen.NewLocalPartySaveData(newPCount)
 		P := NewLocalParty(params, save, outCh, endCh).(*LocalParty)
 		newCommittee = append(newCommittee, P)
@@ -164,7 +167,8 @@ signing:
 	signEndCh := make(chan *common.SignatureData, len(signPIDs))
 
 	for j, signPID := range signPIDs {
-		params := tss.NewParameters(tss.Edwards(), signP2pCtx, signPID, len(signPIDs), newThreshold)
+		params, err := tss.NewParameters(tss.Edwards(), signP2pCtx, signPID, len(signPIDs), newThreshold)
+		assert.NoError(t, err)
 		P := signing.NewLocalParty(big.NewInt(42), params, signKeys[j], signOutCh, signEndCh).(*signing.LocalParty)
 		signParties = append(signParties, P)
 		go func(P *signing.LocalParty) {

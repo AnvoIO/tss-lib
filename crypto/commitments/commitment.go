@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 // partly ported from:
 // https://github.com/KZen-networks/curv/blob/78a70f43f5eda376e5888ce33aec18962f572bbe/src/cryptographic_primitives/commitments/hash_commitment.rs
@@ -10,10 +11,11 @@
 package commitments
 
 import (
+	"crypto/subtle"
 	"io"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
+	"github.com/AnvoIO/tss-lib/v3/common"
 )
 
 const (
@@ -59,7 +61,22 @@ func (cmt *HashCommitDecommit) Verify() bool {
 		return false
 	}
 	hash := common.SHA512_256i(D...)
-	return hash.Cmp(C) == 0
+	if hash == nil {
+		return false
+	}
+	// Use constant-time comparison to avoid timing side-channels (KS-BTL-O-13)
+	hashBytes := hash.Bytes()
+	cBytes := C.Bytes()
+	// Pad to equal length for constant-time compare
+	maxLen := len(hashBytes)
+	if len(cBytes) > maxLen {
+		maxLen = len(cBytes)
+	}
+	paddedHash := make([]byte, maxLen)
+	paddedC := make([]byte, maxLen)
+	copy(paddedHash[maxLen-len(hashBytes):], hashBytes)
+	copy(paddedC[maxLen-len(cBytes):], cBytes)
+	return subtle.ConstantTimeCompare(paddedHash, paddedC) == 1
 }
 
 func (cmt *HashCommitDecommit) DeCommit() (bool, HashDeCommitment) {

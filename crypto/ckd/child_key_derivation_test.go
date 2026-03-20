@@ -1,16 +1,22 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package ckd_test
 
 import (
+	"crypto/elliptic"
+	"crypto/sha256"
+	"encoding/binary"
 	"testing"
 
-	. "github.com/bnb-chain/tss-lib/v2/crypto/ckd"
+	. "github.com/AnvoIO/tss-lib/v3/crypto/ckd"
 	"github.com/btcsuite/btcd/btcec/v2"
+	"github.com/btcsuite/btcutil/base58"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestPublicDerivation(t *testing.T) {
@@ -129,4 +135,36 @@ tests:
 			continue
 		}
 	}
+}
+
+func TestNewExtendedKeyFromStringRejectsInvalidPoint(t *testing.T) {
+	// Build a syntactically valid payload with an invalid compressed pubkey for P256 (all zeros).
+	payload := make([]byte, 78)
+	copy(payload[:4], []byte{0x04, 0x88, 0xB2, 0x1E})
+	payload[4] = 1
+	binary.BigEndian.PutUint32(payload[9:13], 1)
+	checksum := doubleHash(payload)[:4]
+	encoded := base58.Encode(append(payload, checksum...))
+
+	extKey, err := NewExtendedKeyFromString(encoded, elliptic.P256())
+	assert.Error(t, err)
+	assert.Nil(t, extKey)
+}
+
+func TestExtendedKeyStringInvalidStateDoesNotPanic(t *testing.T) {
+	var key *ExtendedKey
+	assert.NotPanics(t, func() {
+		assert.Equal(t, "", key.String())
+	})
+
+	invalid := &ExtendedKey{}
+	assert.NotPanics(t, func() {
+		assert.Equal(t, "", invalid.String())
+	})
+}
+
+func doubleHash(in []byte) []byte {
+	h1 := sha256.Sum256(in)
+	h2 := sha256.Sum256(h1[:])
+	return h2[:]
 }

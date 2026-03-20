@@ -10,13 +10,13 @@ import (
 	"crypto/sha512"
 	"math/big"
 
+	"github.com/AnvoIO/tss-lib/v3/common"
 	"github.com/agl/ed25519/edwards25519"
-	"github.com/bnb-chain/tss-lib/v2/common"
 	"github.com/pkg/errors"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *round3) Start() *tss.Error {

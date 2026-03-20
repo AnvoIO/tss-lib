@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package common
 
@@ -107,6 +108,9 @@ func GetRandomGeneratorOfTheQuadraticResidue(rand io.Reader, n *big.Int) *big.In
 func GetRandomQuadraticNonResidue(rand io.Reader, n *big.Int) *big.Int {
 	for {
 		w := GetRandomPositiveInt(rand, n)
+		if w == nil {
+			return nil
+		}
 		if big.Jacobi(w, n) == -1 {
 			return w
 		}

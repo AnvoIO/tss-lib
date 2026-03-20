@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -11,8 +12,8 @@ import (
 	"fmt"
 	"math/big"
 
+	"github.com/AnvoIO/tss-lib/v3/tss"
 	"github.com/agl/ed25519/edwards25519"
-	"github.com/bnb-chain/tss-lib/v2/tss"
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 )
 
@@ -60,6 +61,7 @@ func (round *finalization) Start() *tss.Error {
 	if !ok {
 		return round.WrapError(fmt.Errorf("signature verification failed"))
 	}
+	round.temp.Clear()
 	round.end <- round.data
 
 	return nil

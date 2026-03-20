@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -12,10 +13,10 @@ import (
 
 	errors2 "github.com/pkg/errors"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *round5) Start() *tss.Error {
@@ -65,12 +66,22 @@ func (round *round5) Start() *tss.Error {
 	ry := R.Y()
 	si := modN.Add(modN.Mul(round.temp.m, round.temp.k), modN.Mul(rx, round.temp.sigma))
 
-	// clear temp.w and temp.k from memory, lint ignore
-	round.temp.w = zero
-	round.temp.k = zero
+	// Clear secrets in place; do not assign package-level shared zero pointers.
+	if round.temp.w != nil {
+		round.temp.w.SetInt64(0)
+	}
+	if round.temp.k != nil {
+		round.temp.k.SetInt64(0)
+	}
 
-	li := common.GetRandomPositiveInt(round.Rand(), N)  // li
+	li := common.GetRandomPositiveInt(round.Rand(), N) // li
+	if li == nil {
+		return round.WrapError(errors.New("failed to generate random li"))
+	}
 	roI := common.GetRandomPositiveInt(round.Rand(), N) // pi
+	if roI == nil {
+		return round.WrapError(errors.New("failed to generate random roi"))
+	}
 	rToSi := R.ScalarMult(si)
 	liPoint := crypto.ScalarBaseMult(round.Params().EC(), li)
 	bigAi := crypto.ScalarBaseMult(round.Params().EC(), roI)

@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
@@ -12,8 +13,20 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
 )
+
+var dlnTestSession = []byte("dln-test-session")
+
+func TestNewDlnProofVerifierZeroConcurrencyDoesNotPanic(t *testing.T) {
+	verifier := NewDlnProofVerifier(0)
+	if verifier == nil {
+		t.Fatal("expected verifier instance")
+	}
+	if cap(verifier.semaphore) != 1 {
+		t.Fatalf("expected semaphore capacity 1 when concurrency <= 0, got %d", cap(verifier.semaphore))
+	}
+}
 
 func BenchmarkDlnProof_Verify(b *testing.B) {
 	localPartySaveData, _, err := LoadKeygenTestFixtures(1)
@@ -24,6 +37,7 @@ func BenchmarkDlnProof_Verify(b *testing.B) {
 	params := localPartySaveData[0].LocalPreParams
 
 	proof := dlnproof.NewDLNProof(
+		dlnTestSession,
 		params.H1i,
 		params.H2i,
 		params.Alpha,
@@ -35,7 +49,7 @@ func BenchmarkDlnProof_Verify(b *testing.B) {
 
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
-		proof.Verify(params.H1i, params.H2i, params.NTildei)
+		proof.Verify(dlnTestSession, params.H1i, params.H2i, params.NTildei)
 	}
 }
 
@@ -50,7 +64,7 @@ func BenchmarkDlnVerifier_VerifyProof1(b *testing.B) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		resultChan := make(chan bool)
-		verifier.VerifyDLNProof1(message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
+		verifier.VerifyDLNProof1(dlnTestSession, message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
 			resultChan <- result
 		})
 		<-resultChan
@@ -68,7 +82,7 @@ func BenchmarkDlnVerifier_VerifyProof2(b *testing.B) {
 	b.ResetTimer()
 	for n := 0; n < b.N; n++ {
 		resultChan := make(chan bool)
-		verifier.VerifyDLNProof2(message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
+		verifier.VerifyDLNProof2(dlnTestSession, message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
 			resultChan <- result
 		})
 		<-resultChan
@@ -85,7 +99,7 @@ func TestVerifyDLNProof1_Success(t *testing.T) {
 
 	resultChan := make(chan bool)
 
-	verifier.VerifyDLNProof1(message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
+	verifier.VerifyDLNProof1(dlnTestSession, message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
 		resultChan <- result
 	})
 
@@ -105,7 +119,7 @@ func TestVerifyDLNProof1_MalformedMessage(t *testing.T) {
 
 	resultChan := make(chan bool)
 
-	verifier.VerifyDLNProof1(message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
+	verifier.VerifyDLNProof1(dlnTestSession, message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
 		resultChan <- result
 	})
 
@@ -126,7 +140,7 @@ func TestVerifyDLNProof1_IncorrectProof(t *testing.T) {
 	resultChan := make(chan bool)
 
 	wrongH1i := preParams.H1i.Sub(preParams.H1i, big.NewInt(1))
-	verifier.VerifyDLNProof1(message, wrongH1i, preParams.H2i, preParams.NTildei, func(result bool) {
+	verifier.VerifyDLNProof1(dlnTestSession, message, wrongH1i, preParams.H2i, preParams.NTildei, func(result bool) {
 		resultChan <- result
 	})
 
@@ -146,7 +160,7 @@ func TestVerifyDLNProof2_Success(t *testing.T) {
 
 	resultChan := make(chan bool)
 
-	verifier.VerifyDLNProof2(message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
+	verifier.VerifyDLNProof2(dlnTestSession, message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
 		resultChan <- result
 	})
 
@@ -166,7 +180,7 @@ func TestVerifyDLNProof2_MalformedMessage(t *testing.T) {
 
 	resultChan := make(chan bool)
 
-	verifier.VerifyDLNProof2(message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
+	verifier.VerifyDLNProof2(dlnTestSession, message, preParams.H1i, preParams.H2i, preParams.NTildei, func(result bool) {
 		resultChan <- result
 	})
 
@@ -187,7 +201,7 @@ func TestVerifyDLNProof2_IncorrectProof(t *testing.T) {
 	resultChan := make(chan bool)
 
 	wrongH2i := preParams.H2i.Add(preParams.H2i, big.NewInt(1))
-	verifier.VerifyDLNProof2(message, preParams.H1i, wrongH2i, preParams.NTildei, func(result bool) {
+	verifier.VerifyDLNProof2(dlnTestSession, message, preParams.H1i, wrongH2i, preParams.NTildei, func(result bool) {
 		resultChan <- result
 	})
 
@@ -224,6 +238,7 @@ func prepareProof() (*LocalPreParams, [][]byte, error) {
 	preParams := localPartySaveData[0].LocalPreParams
 
 	proof := dlnproof.NewDLNProof(
+		dlnTestSession,
 		preParams.H1i,
 		preParams.H2i,
 		preParams.Alpha,
