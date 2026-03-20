@@ -1,9 +1,13 @@
 # tss-lib
 
-[![MIT licensed][1]][2]
+[![Build & Test][1]][2] [![Go fmt][3]][4] [![MIT licensed][5]][6]
 
-[1]: https://img.shields.io/badge/license-MIT-blue.svg
-[2]: LICENSE
+[1]: https://github.com/AnvoIO/tss-lib/actions/workflows/test.yml/badge.svg
+[2]: https://github.com/AnvoIO/tss-lib/actions/workflows/test.yml
+[3]: https://github.com/AnvoIO/tss-lib/actions/workflows/gofmt.yml/badge.svg
+[4]: https://github.com/AnvoIO/tss-lib/actions/workflows/gofmt.yml
+[5]: https://img.shields.io/badge/license-MIT-blue.svg
+[6]: LICENSE
 
 A Go implementation of multi-party {t,n}-threshold ECDSA and EdDSA signature schemes based on Gennaro and Goldfeder CCS 2018 [1]. Provides distributed key generation, signing, and dynamic group re-sharing with no trusted dealer.
 
