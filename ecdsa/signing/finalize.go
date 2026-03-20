@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -12,8 +13,8 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *finalization) Start() *tss.Error {
@@ -80,6 +81,7 @@ func (round *finalization) Start() *tss.Error {
 		return round.WrapError(fmt.Errorf("signature verification failed"))
 	}
 
+	round.temp.Clear()
 	round.end <- round.data
 
 	return nil
@@ -102,9 +104,13 @@ func (round *finalization) NextRound() tss.Round {
 func padToLengthBytesInPlace(src []byte, length int) []byte {
 	oriLen := len(src)
 	if oriLen < length {
-		for i := 0; i < length-oriLen; i++ {
-			src = append([]byte{0}, src...)
+		result := make([]byte, length)
+		copy(result[length-oriLen:], src)
+		// zero original src bytes
+		for i := range src {
+			src[i] = 0
 		}
+		return result
 	}
 	return src
 }

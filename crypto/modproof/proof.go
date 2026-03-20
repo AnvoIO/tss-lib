@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019-2023 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package modproof
 
@@ -11,10 +12,11 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
+	"github.com/AnvoIO/tss-lib/v3/common"
 )
 
 const (
+	// Iterations controls the soundness of the mod proof: 80 iterations → 2^{-80} soundness error.
 	Iterations         = 80
 	ProofModBytesParts = Iterations*2 + 3
 )
@@ -50,7 +52,12 @@ func NewProof(Session []byte, N, P, Q *big.Int, rand io.Reader) (*ProofMod, erro
 
 	// Fig 16.3
 	modN, modPhi := common.ModInt(N), common.ModInt(Phi)
-	invN := new(big.Int).ModInverse(N, Phi)
+	// Phi is even so ModInverse falls back to non-CT math/big.
+	// This is a keygen-time operation, not the signing hot path.
+	invN := common.ModInt(Phi).ModInverse(N)
+	if invN == nil {
+		return nil, fmt.Errorf("N is not invertible mod Phi")
+	}
 	X := [Iterations]*big.Int{}
 	// Fix bitLen of A and B
 	A := new(big.Int).Lsh(one, Iterations)
@@ -115,7 +122,13 @@ func (pf *ProofMod) Verify(Session []byte, N *big.Int) bool {
 	if pf == nil || !pf.ValidateBasic() {
 		return false
 	}
-	// TODO: add basic properties checker
+	// N must be at least 2048 bits and odd (not prime)
+	if N.BitLen() < 2048 {
+		return false
+	}
+	if N.Bit(0) == 0 {
+		return false
+	}
 	if isQuadraticResidue(pf.W, N) {
 		return false
 	}

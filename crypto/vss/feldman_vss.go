@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 // Feldman VSS, based on Paul Feldman, 1987., A practical scheme for non-interactive verifiable secret sharing.
 // In Foundations of Computer Science, 1987., 28th Annual Symposium on. IEEE, 427–43
@@ -17,8 +18,8 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
 )
 
 type (
@@ -114,7 +115,7 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 }
 
 func (shares Shares) ReConstruct(ec elliptic.Curve) (secret *big.Int, err error) {
-	if shares != nil && shares[0].Threshold > len(shares) {
+	if shares != nil && shares[0].Threshold+1 > len(shares) {
 		return nil, ErrNumSharesBelowThreshold
 	}
 	modN := common.ModInt(ec.Params().N)
@@ -133,7 +134,10 @@ func (shares Shares) ReConstruct(ec elliptic.Curve) (secret *big.Int, err error)
 				continue
 			}
 			sub := modN.Sub(xs[j], share.ID)
-			subInv := modN.ModInverse(sub)
+			subInv, err := modN.ModInverseChecked(sub)
+			if err != nil {
+				return nil, fmt.Errorf("share ID difference is not invertible (duplicate IDs?): %v", err)
+			}
 			div := modN.Mul(xs[j], subInv)
 			times = modN.Mul(times, div)
 		}

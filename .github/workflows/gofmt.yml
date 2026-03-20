@@ -1,11 +1,29 @@
-name: Go-fmt
-on: push
+name: Go fmt
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
 jobs:
   gofmt:
-    name: Go fmt project
+    name: Go fmt check
     runs-on: ubuntu-latest
     steps:
-      - name: check out
-        uses: actions/checkout@v3
-      - name: go fmt project
-        uses: Jerome1337/gofmt-action@v1.0.4
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - uses: actions/checkout@v4
+
+      - name: Check formatting
+        run: |
+          unformatted=$(find . -name '*.go' ! -name '*.pb.go' -exec gofmt -l {} +)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not formatted:"
+            echo "$unformatted"
+            exit 1
+          fi

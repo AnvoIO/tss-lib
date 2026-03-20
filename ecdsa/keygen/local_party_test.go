@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
@@ -20,13 +21,13 @@ import (
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/dlnproof"
-	"github.com/bnb-chain/tss-lib/v2/crypto/paillier"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/test"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/test"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 const (
@@ -43,10 +44,11 @@ func setUp(level string) {
 func TestStartRound1Paillier(t *testing.T) {
 	setUp("debug")
 
-	pIDs := tss.GenerateTestPartyIDs(1)
+	pIDs := tss.GenerateTestPartyIDs(2)
 	p2pCtx := tss.NewPeerContext(pIDs)
 	threshold := 1
-	params := tss.NewParameters(tss.EC(), p2pCtx, pIDs[0], len(pIDs), threshold)
+	params, err := tss.NewParameters(tss.EC(), p2pCtx, pIDs[0], len(pIDs), threshold)
+	assert.NoError(t, err)
 
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {
@@ -83,10 +85,11 @@ func TestStartRound1Paillier(t *testing.T) {
 func TestFinishAndSaveH1H2(t *testing.T) {
 	setUp("debug")
 
-	pIDs := tss.GenerateTestPartyIDs(1)
+	pIDs := tss.GenerateTestPartyIDs(2)
 	p2pCtx := tss.NewPeerContext(pIDs)
 	threshold := 1
-	params := tss.NewParameters(tss.EC(), p2pCtx, pIDs[0], len(pIDs), threshold)
+	params, err := tss.NewParameters(tss.EC(), p2pCtx, pIDs[0], len(pIDs), threshold)
+	assert.NoError(t, err)
 
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {
@@ -133,7 +136,8 @@ func TestBadMessageCulprits(t *testing.T) {
 
 	pIDs := tss.GenerateTestPartyIDs(2)
 	p2pCtx := tss.NewPeerContext(pIDs)
-	params := tss.NewParameters(tss.S256(), p2pCtx, pIDs[0], len(pIDs), 1)
+	params, err := tss.NewParameters(tss.S256(), p2pCtx, pIDs[0], len(pIDs), 1)
+	assert.NoError(t, err)
 
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {
@@ -192,7 +196,8 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 	// init the parties
 	for i := 0; i < len(pIDs); i++ {
 		var P *LocalParty
-		params := tss.NewParameters(tss.S256(), p2pCtx, pIDs[i], len(pIDs), threshold)
+		params, err := tss.NewParameters(tss.S256(), p2pCtx, pIDs[i], len(pIDs), threshold)
+		assert.NoError(t, err)
 		// do not use in untrusted setting
 		params.SetNoProofMod()
 		// do not use in untrusted setting
@@ -267,7 +272,8 @@ keygen:
 					assert.NoError(t, err, "vss.ReConstruct should not throw error")
 
 					// uG test: u*G[j] == V[0]
-					assert.Equal(t, uj, Pj.temp.ui)
+					// Note: Pj.temp.ui is zeroed by Clear() after protocol completion (H3 security fix).
+					// We verify correctness via uG == V[0] using the reconstructed uj instead.
 					uG := crypto.ScalarBaseMult(tss.EC(), uj)
 					assert.True(t, uG.Equals(Pj.temp.vs[0]), "ensure u*G[j] == V_0")
 
@@ -279,12 +285,12 @@ keygen:
 
 					// fails if threshold cannot be satisfied (bad share)
 					{
-						badShares := pShares[:threshold]
+						badShares := pShares[:threshold+1]
 						badShares[len(badShares)-1].Share.Set(big.NewInt(0))
-						uj, err := pShares[:threshold].ReConstruct(tss.S256())
+						badUj, err := pShares[:threshold+1].ReConstruct(tss.S256())
 						assert.NoError(t, err)
-						assert.NotEqual(t, parties[j].temp.ui, uj)
-						BigXjX, BigXjY := tss.EC().ScalarBaseMult(uj.Bytes())
+						assert.NotEqual(t, uj, badUj)
+						BigXjX, BigXjY := tss.EC().ScalarBaseMult(badUj.Bytes())
 						assert.NotEqual(t, BigXjX, Pj.temp.vs[0].X())
 						assert.NotEqual(t, BigXjY, Pj.temp.vs[0].Y())
 					}

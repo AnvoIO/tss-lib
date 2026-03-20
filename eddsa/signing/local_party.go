@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package signing
 
@@ -11,11 +12,11 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	cmt "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/eddsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	cmt "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 // Implements Party
@@ -98,6 +99,32 @@ func NewLocalParty(
 	}
 	p.temp.cjs = make([]*big.Int, partyCount)
 	return p
+}
+
+// Clear zeros sensitive data in temp storage to reduce the window of exposure.
+// Internally-generated secrets are zeroed in-place; externally-provided values
+// (like m) are nil'd out to avoid mutating the caller's data.
+func (td *localTempData) Clear() {
+	if td.wi != nil {
+		td.wi.SetInt64(0)
+	}
+	if td.ri != nil {
+		td.ri.SetInt64(0)
+	}
+	if td.si != nil {
+		for i := range td.si {
+			td.si[i] = 0
+		}
+	}
+	if td.r != nil {
+		td.r.SetInt64(0)
+	}
+	td.m = nil // externally provided; do not mutate caller's big.Int
+	for _, c := range td.cjs {
+		if c != nil {
+			c.SetInt64(0)
+		}
+	}
 }
 
 func (p *LocalParty) FirstRound() tss.Round {

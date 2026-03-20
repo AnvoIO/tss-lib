@@ -1,33 +1,58 @@
-name: Go Test
+name: Build & Test
+
 on:
   push:
     branches:
-      - master
-      - release/*
+      - main
   pull_request:
-    branches:
-      - master
+  workflow_dispatch:
 
 jobs:
-  build:
-    name: Test
-    runs-on: macOS-latest
+  test:
+    name: 'Test: ${{ matrix.cfg.name }}'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cfg: {name: 'Ubuntu 22.04 x86_64', runson: 'ubuntu-22.04'}
+          - cfg: {name: 'Ubuntu 24.04 x86_64', runson: 'ubuntu-24.04'}
+          - cfg: {name: 'Ubuntu 22.04 ARM64',  runson: 'ubuntu-24.04-arm', container: 'ubuntu:jammy'}
+          - cfg: {name: 'Ubuntu 24.04 ARM64',  runson: 'ubuntu-24.04-arm', container: 'ubuntu:noble'}
+          - cfg: {name: 'macOS (Apple Silicon)', runson: 'macos-latest'}
+    runs-on: ${{ matrix.cfg.runson }}
+    container: ${{ matrix.cfg.container || '' }}
     steps:
+      - name: Install packages (container)
+        if: matrix.cfg.container
+        run: |
+          apt-get update && apt-get -y install build-essential git curl
+          curl -fsSL https://go.dev/dl/go1.23.6.linux-arm64.tar.gz | tar -C /usr/local -xzf -
+          echo "/usr/local/go/bin" >> $GITHUB_PATH
 
-      - name: Set up Go 1.20
-        uses: actions/setup-go@v3
+      - name: Set up Go
+        if: '!matrix.cfg.container'
+        uses: actions/setup-go@v5
         with:
-          go-version: 1.20.3
-        id: go
+          go-version: '1.23'
 
-      - name: Check out code into the Go module directory
-        uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      - name: Clean dependencies
-        run: go clean --modcache
+      - name: Build
+        run: go build ./...
 
-      - name: Get dependencies
-        run: go mod tidy
-
-      - name: Run Tests
+      - name: Test (with race detection)
         run: make test_unit_race
+
+  test-signing-race:
+    name: 'Signing race regression'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - uses: actions/checkout@v4
+
+      - name: Run signing race regression tests
+        run: make test_signing_race

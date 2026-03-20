@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
@@ -11,12 +12,12 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	cmts "github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/dlnproof"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	cmts "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 var zero = big.NewInt(0)
@@ -41,6 +42,9 @@ func (round *round1) Start() *tss.Error {
 
 	// 1. calculate "partial" key share ui
 	ui := common.GetRandomPositiveInt(round.PartialKeyRand(), round.EC().Params().N)
+	if ui == nil {
+		return round.WrapError(errors.New("failed to generate random ui"))
+	}
 
 	round.temp.ui = ui
 
@@ -52,9 +56,7 @@ func (round *round1) Start() *tss.Error {
 	}
 	round.save.Ks = ids
 
-	// security: the original u_i may be discarded
-	ui = zero // clears the secret data from memory
-	_ = ui    // silences a linter warning
+	// security: round.temp.ui will be cleared in the final round's Clear()
 
 	// make commitment -> (C, D)
 	pGFlat, err := crypto.FlattenECPoints(vs)
@@ -87,23 +89,20 @@ func (round *round1) Start() *tss.Error {
 	round.save.NTildej[i] = preParams.NTildei
 	round.save.H1j[i], round.save.H2j[i] = preParams.H1i, preParams.H2i
 
-	// generate the dlnproofs for keygen
-	h1i, h2i, alpha, beta, p, q, NTildei := preParams.H1i,
-		preParams.H2i,
-		preParams.Alpha,
-		preParams.Beta,
-		preParams.P,
-		preParams.Q,
-		preParams.NTildei
-	dlnProof1 := dlnproof.NewDLNProof(h1i, h2i, alpha, p, q, NTildei, round.Rand())
-	dlnProof2 := dlnproof.NewDLNProof(h2i, h1i, beta, p, q, NTildei, round.Rand())
-
 	// for this P: SAVE
 	// - shareID
 	// and keep in temporary storage:
 	// - VSS Vs
 	// - our set of Shamir shares
-	round.temp.ssidNonce = new(big.Int).SetUint64(0)
+	// GG20 session binding: use caller-provided session nonce if available.
+	// For keygen, all parties must agree on the nonce via external coordination
+	// (e.g., coordinator-assigned session ID) since no shared session-unique
+	// value is available within the protocol itself.
+	if nonce := round.Params().SessionNonce(); nonce != nil {
+		round.temp.ssidNonce = new(big.Int).Set(nonce)
+	} else {
+		round.temp.ssidNonce = new(big.Int).SetUint64(0)
+	}
 	round.save.ShareID = ids[i]
 	round.temp.vs = vs
 	ssid, err := round.getSSID()
@@ -112,6 +111,17 @@ func (round *round1) Start() *tss.Error {
 	}
 	round.temp.ssid = ssid
 	round.temp.shares = shares
+
+	// generate the dlnproofs for keygen
+	h1i, h2i, alpha, beta, p, q, NTildei := preParams.H1i,
+		preParams.H2i,
+		preParams.Alpha,
+		preParams.Beta,
+		preParams.P,
+		preParams.Q,
+		preParams.NTildei
+	dlnProof1 := dlnproof.NewDLNProof(round.temp.ssid, h1i, h2i, alpha, p, q, NTildei, round.Rand())
+	dlnProof2 := dlnproof.NewDLNProof(round.temp.ssid, h2i, h1i, beta, p, q, NTildei, round.Rand())
 
 	// for this P: SAVE de-commitments, paillier keys for round 2
 	round.save.PaillierSK = preParams.PaillierSK

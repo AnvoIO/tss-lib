@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
+	"github.com/AnvoIO/tss-lib/v3/common"
 )
 
 func TestRejectionSample(t *testing.T) {

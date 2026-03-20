@@ -1,21 +1,22 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package resharing
 
 import (
-	"bytes"
+	"crypto/subtle"
 	"errors"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/modproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/modproof"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/dlnproof"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 var zero = big.NewInt(0)
@@ -45,7 +46,7 @@ func (round *round2) Start() *tss.Error {
 		}
 		r1msg := round.temp.dgRound1Messages[j].Content().(*DGRound1Message)
 		SSIDj := r1msg.UnmarshalSSID()
-		if !bytes.Equal(SSID, SSIDj) {
+		if subtle.ConstantTimeCompare(SSID, SSIDj) != 1 {
 			return round.WrapError(errors.New("ssid mismatch"), Pj)
 		}
 	}
@@ -87,8 +88,8 @@ func (round *round2) Start() *tss.Error {
 		preParams.P,
 		preParams.Q,
 		preParams.NTildei
-	dlnProof1 := dlnproof.NewDLNProof(h1i, h2i, alpha, p, q, NTildei, round.Rand())
-	dlnProof2 := dlnproof.NewDLNProof(h2i, h1i, beta, p, q, NTildei, round.Rand())
+	dlnProof1 := dlnproof.NewDLNProof(round.temp.ssid, h1i, h2i, alpha, p, q, NTildei, round.Rand())
+	dlnProof2 := dlnproof.NewDLNProof(round.temp.ssid, h2i, h1i, beta, p, q, NTildei, round.Rand())
 
 	modProof := &modproof.ProofMod{W: zero, X: *new([80]*big.Int), A: zero, B: zero, Z: *new([80]*big.Int)}
 	ContextI := append(round.temp.ssid, big.NewInt(int64(i)).Bytes()...)

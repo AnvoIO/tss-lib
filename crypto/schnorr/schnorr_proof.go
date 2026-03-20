@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package schnorr
 
@@ -11,8 +12,8 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
 )
 
 type (
@@ -45,7 +46,7 @@ func NewZKProof(Session []byte, x *big.Int, X *crypto.ECPoint, rand io.Reader) (
 		cHash := common.SHA512_256i_TAGGED(Session, X.X(), X.Y(), g.X(), g.Y(), alpha.X(), alpha.Y())
 		c = common.RejectionSample(q, cHash)
 	}
-	t := new(big.Int).Mul(c, x)
+	t := common.ModInt(q).Mul(c, x)
 	t = common.ModInt(q).Add(a, t)
 
 	return &ZKProof{Alpha: alpha, T: t}, nil
@@ -100,8 +101,8 @@ func NewZKVProof(Session []byte, V, R *crypto.ECPoint, s, l *big.Int, rand io.Re
 		c = common.RejectionSample(q, cHash)
 	}
 	modQ := common.ModInt(q)
-	t := modQ.Add(a, new(big.Int).Mul(c, s))
-	u := modQ.Add(b, new(big.Int).Mul(c, l))
+	t := modQ.Add(a, modQ.Mul(c, s))
+	u := modQ.Add(b, modQ.Mul(c, l))
 
 	return &ZKVProof{Alpha: alpha, T: t, U: u}, nil
 }

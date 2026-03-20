@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package keygen
 
@@ -10,23 +11,27 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"io"
 	"math/big"
 	"runtime"
 	"time"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
 )
 
 const (
-	// Using a modulus length of 2048 is recommended in the GG18 spec
+	// Using a modulus length of 2048 is recommended in the GG18 spec.
+	// 2048-bit Paillier modulus provides ~112 bits of security (NIST SP 800-57).
 	paillierModulusLen = 2048
-	// Two 1024-bit safe primes to produce NTilde
+	// Two 1024-bit safe primes to produce NTilde.
+	// 2×1024-bit safe primes yield a ~2048-bit modulus for ZK proofs (~112-bit security).
 	safePrimeBitLen = 1024
 	// Ticker for printing log statements while generating primes/modulus
 	logProgressTickInterval = 8 * time.Second
-	// Safe big len using random for ssid
+	// Safe big len using random for ssid.
+	// 1024-bit SSID provides collision resistance well beyond 128-bit security level.
 	SafeBitLen = 1024
 )
 
@@ -56,7 +61,7 @@ func GeneratePreParamsWithContextAndRandom(ctx context.Context, rand io.Reader, 
 	var concurrency int
 	if 0 < len(optionalConcurrency) {
 		if 1 < len(optionalConcurrency) {
-			panic(errors.New("GeneratePreParams: expected 0 or 1 item in `optionalConcurrency`"))
+			return nil, errors.New("GeneratePreParams: expected 0 or 1 item in `optionalConcurrency`")
 		}
 		concurrency = optionalConcurrency[0]
 	} else {
@@ -138,7 +143,10 @@ consumer:
 	modPQ := common.ModInt(new(big.Int).Mul(p, q))
 	f1 := common.GetRandomPositiveRelativelyPrimeInt(rand, NTildei)
 	alpha := common.GetRandomPositiveRelativelyPrimeInt(rand, NTildei)
-	beta := modPQ.ModInverse(alpha)
+	beta, err := modPQ.ModInverseChecked(alpha)
+	if err != nil {
+		return nil, fmt.Errorf("alpha is not invertible mod pq: %v", err)
+	}
 	h1i := modNTildeI.Mul(f1, f1)
 	h2i := modNTildeI.Exp(h1i, alpha)
 

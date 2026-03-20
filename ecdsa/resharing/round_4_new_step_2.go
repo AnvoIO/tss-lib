@@ -1,8 +1,9 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
 // Copyright © 2019 Binance
 //
-// This file is part of Binance. The full Binance copyright notice, including
-// terms governing use, modification, and redistribution, is contained in the
-// file LICENSE at the root of the source code distribution tree.
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
 
 package resharing
 
@@ -12,16 +13,16 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/bnb-chain/tss-lib/v2/crypto/facproof"
+	"github.com/AnvoIO/tss-lib/v3/crypto/facproof"
 
 	errors2 "github.com/pkg/errors"
 
-	"github.com/bnb-chain/tss-lib/v2/common"
-	"github.com/bnb-chain/tss-lib/v2/crypto"
-	"github.com/bnb-chain/tss-lib/v2/crypto/commitments"
-	"github.com/bnb-chain/tss-lib/v2/crypto/vss"
-	"github.com/bnb-chain/tss-lib/v2/ecdsa/keygen"
-	"github.com/bnb-chain/tss-lib/v2/tss"
+	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 func (round *round4) Start() *tss.Error {
@@ -92,14 +93,14 @@ func (round *round4) Start() *tss.Error {
 		}(j, msg, r2msg1)
 		_j := j
 		_msg := msg
-		dlnVerifier.VerifyDLNProof1(r2msg1, H1j, H2j, NTildej, func(isValid bool) {
+		dlnVerifier.VerifyDLNProof1(round.temp.ssid, r2msg1, H1j, H2j, NTildej, func(isValid bool) {
 			if !isValid {
 				dlnProof1FailCulprits[_j] = _msg.GetFrom()
 				common.Logger.Warningf("dln proof 1 verify failed for party %s", _msg.GetFrom())
 			}
 			wg.Done()
 		})
-		dlnVerifier.VerifyDLNProof2(r2msg1, H2j, H1j, NTildej, func(isValid bool) {
+		dlnVerifier.VerifyDLNProof2(round.temp.ssid, r2msg1, H2j, H1j, NTildej, func(isValid bool) {
 			if !isValid {
 				dlnProof2FailCulprits[_j] = _msg.GetFrom()
 				common.Logger.Warningf("dln proof 2 verify failed for party %s", _msg.GetFrom())
@@ -130,7 +131,9 @@ func (round *round4) Start() *tss.Error {
 	// 5-9.
 	modQ := common.ModInt(round.Params().EC().Params().N)
 	vjc := make([][]*crypto.ECPoint, len(round.OldParties().IDs()))
+	vValidationCulprits := make([]*tss.PartyID, 0, len(round.OldParties().IDs()))
 	for j := 0; j <= len(vjc)-1; j++ { // P1..P_t+1. Ps are indexed from 0 here
+		Pj := round.Parties().IDs()[j]
 		// 6-7.
 		r1msg := round.temp.dgRound1Messages[j].Content().(*DGRound1Message)
 		r3msg2 := round.temp.dgRound3Message2s[j].Content().(*DGRound3Message2)
@@ -141,12 +144,15 @@ func (round *round4) Start() *tss.Error {
 		vCmtDeCmt := commitments.HashCommitDecommit{C: vCj, D: vDj}
 		ok, flatVs := vCmtDeCmt.DeCommit()
 		if !ok || len(flatVs) != (round.NewThreshold()+1)*2 { // they're points so * 2
-			// TODO collect culprits and return a list of them as per convention
-			return round.WrapError(errors.New("de-commitment of v_j0..v_jt failed"), round.Parties().IDs()[j])
+			common.Logger.Warningf("resharing v de-commitment verification failed for party %s", Pj)
+			vValidationCulprits = append(vValidationCulprits, Pj)
+			continue
 		}
 		vj, err := crypto.UnFlattenECPoints(round.Params().EC(), flatVs)
 		if err != nil {
-			return round.WrapError(err, round.Parties().IDs()[j])
+			common.Logger.Warningf("resharing v de-commitment unmarshal failed for party %s: %v", Pj, err)
+			vValidationCulprits = append(vValidationCulprits, Pj)
+			continue
 		}
 		vjc[j] = vj
 
@@ -158,12 +164,16 @@ func (round *round4) Start() *tss.Error {
 			Share:     new(big.Int).SetBytes(r3msg1.Share),
 		}
 		if ok := sharej.Verify(round.Params().EC(), round.NewThreshold(), vj); !ok {
-			// TODO collect culprits and return a list of them as per convention
-			return round.WrapError(errors.New("share from old committee did not pass Verify()"), round.Parties().IDs()[j])
+			common.Logger.Warningf("resharing share verification failed for party %s", Pj)
+			vValidationCulprits = append(vValidationCulprits, Pj)
+			continue
 		}
 
 		// 9.
 		newXi = new(big.Int).Add(newXi, sharej.Share)
+	}
+	if len(vValidationCulprits) > 0 {
+		return round.WrapError(errors.New("v commitment/share validation failed"), vValidationCulprits...)
 	}
 
 	// 10-13.
