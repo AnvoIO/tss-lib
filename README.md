@@ -11,7 +11,7 @@
 
 A Go implementation of multi-party {t,n}-threshold ECDSA and EdDSA signature schemes based on Gennaro and Goldfeder CCS 2018 [1]. Provides distributed key generation, signing, and dynamic group re-sharing with no trusted dealer.
 
-Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security hardening, constant-time arithmetic, session-bound Fiat-Shamir challenges, and VSS correctness fixes.
+Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security hardening, constant-time arithmetic, session-bound Fiat-Shamir challenges, VSS correctness fixes, and adversarial input-validation hardening at protocol message boundaries.
 
 ## Features
 
@@ -118,6 +118,17 @@ The transport layer is your responsibility. You must provide:
 - **Reliable broadcast** so all parties receive identical messages (hash-and-compare)
 - **Timeouts and error handling** -- use `Party.WaitingFor()` and `*tss.Error` culprit info
 
+## Releases
+
+### v3.0.1: June 2026 boundary-validation security update (non-breaking)
+
+Security patch. No API or wire-format changes — interoperable with honest v3.0.0
+peers. Closes two input-validation gaps cross-referenced from upstream advisories
+(`SRC-2026-573`, `SRC-2026-644`), including a remote denial-of-service against EdDSA
+signers, plus six defense-in-depth / canonicality hardenings found by a multi-agent
+boundary-validation audit. See the [`CHANGELOG`](./CHANGELOG.md) and
+[Appendix B of the audit report](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation).
+
 ## Breaking changes
 
 ### v2.0: Paillier preparams
@@ -160,6 +171,8 @@ tss-lib/
 ```
 
 ## Security audits
+
+**Stratovera LLC (June 2026)** -- Follow-up boundary-validation audit, cross-referencing upstream advisories (`SRC-2026-573`, `SRC-2026-644`) against this fork and running a multi-agent review of adversarial input validation at every protocol message boundary. Fixed a remote denial-of-service (nil-pointer dereference on an off-curve point in EdDSA signing) and non-canonical EC point acceptance, plus six defense-in-depth / canonicality hardenings (`J1`–`J8`); no further exploitable vulnerability was found. Released in v3.0.1. Documented in [Appendix B](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation) of the report below.
 
 **Stratovera LLC (February 2026)** -- Full-scope audit of the ECDSA/EdDSA threshold signature implementation, covering keygen, signing, resharing, and all supporting cryptographic primitives. Identified 13 findings (2 critical, 3 high, 5 medium, 3 low). All findings have been addressed. The full report is available at [`security/2026-02-24-tss-lib-full-audit.md`](./security/2026-02-24-tss-lib-full-audit.md).
 
