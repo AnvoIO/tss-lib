@@ -97,8 +97,14 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 	if share.Threshold != threshold || vs == nil || len(vs) != threshold+1 {
 		return false
 	}
+	// reject non-canonical share scalar (must be in [0, q)) so a peer cannot
+	// pass verification with a value congruent to the real share modulo q.
+	q := ec.Params().N
+	if share.Share == nil || share.Share.Sign() < 0 || share.Share.Cmp(q) >= 0 {
+		return false
+	}
 	var err error
-	modQ := common.ModInt(ec.Params().N)
+	modQ := common.ModInt(q)
 	v, t := vs[0], one // YRO : we need to have our accumulator outside of the loop
 	for j := 1; j <= threshold; j++ {
 		// t = k_i^j

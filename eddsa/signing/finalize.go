@@ -32,7 +32,13 @@ func (round *finalization) Start() *tss.Error {
 			continue
 		}
 		r3msg := round.temp.signRound3Messages[j].Content().(*SignRound3Message)
-		sjBytes := bigIntToEncodedBytes(r3msg.UnmarshalS())
+		sj := r3msg.UnmarshalS()
+		// reject a non-canonical S_j (must be in [0, L)); otherwise an oversize
+		// value would be silently truncated to 32 bytes by bigIntToEncodedBytes.
+		if sj.Sign() < 0 || sj.Cmp(round.Params().EC().Params().N) >= 0 {
+			return round.WrapError(errors.New("signature share S out of range"), round.Parties().IDs()[j])
+		}
+		sjBytes := bigIntToEncodedBytes(sj)
 		var tmpSumS [32]byte
 		edwards25519.ScMulAdd(&tmpSumS, sumS, bigIntToEncodedBytes(big.NewInt(1)), sjBytes)
 		sumS = &tmpSumS

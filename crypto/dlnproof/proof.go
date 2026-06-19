@@ -55,7 +55,7 @@ func NewDLNProof(Session []byte, h1, h2, x, p, q, N *big.Int, rand io.Reader) *P
 }
 
 func (p *Proof) Verify(Session []byte, h1, h2, N *big.Int) bool {
-	if p == nil {
+	if p == nil || h1 == nil || h2 == nil || N == nil {
 		return false
 	}
 	if N.Sign() != 1 {

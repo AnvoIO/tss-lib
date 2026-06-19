@@ -84,7 +84,9 @@ func (round *round4) Start() *tss.Error {
 			continue
 		}
 
-		newXi = new(big.Int).Add(newXi, sharej.Share)
+		// accumulate mod q so the resulting share stays canonical in [0, q),
+		// matching keygen (which reduces xi mod N before saving).
+		newXi = modQ.Add(newXi, sharej.Share)
 	}
 	if len(vValidationCulprits) > 0 {
 		return round.WrapError(errors.New("v commitment/share validation failed"), vValidationCulprits...)
