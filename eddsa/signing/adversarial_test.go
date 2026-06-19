@@ -18,6 +18,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
 	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
 	"github.com/AnvoIO/tss-lib/v3/test"
 	"github.com/AnvoIO/tss-lib/v3/tss"
@@ -122,6 +124,63 @@ func TestAdversarial_EdDSA_Sign_InvalidDecommitment(t *testing.T) {
 	require.NotNil(t, tssErr, "protocol should fail due to corrupted decommitment")
 	t.Logf("Error: %s", tssErr)
 	assert.True(t, len(tssErr.Culprits()) > 0 || strings.Contains(tssErr.Error(), "de-commitment"), "should identify failure")
+}
+
+// TestAdversarial_EdDSA_Sign_OffCurveRj is a regression test for SRC-2026-644:
+// round 3 must reject an off-curve Rj returned by NewECPoint *before* calling
+// EightInvEight() on it, otherwise an honest signer panics on a nil receiver
+// (remote DoS). Unlike the InvalidDecommitment test — which corrupts the
+// decommitment so DeCommit() fails early — this sends a *consistent*
+// commitment/decommitment pair over an off-curve point, so DeCommit() succeeds
+// and NewECPoint(Rj) is the gate that must reject it.
+func TestAdversarial_EdDSA_Sign_OffCurveRj(t *testing.T) {
+	setUp("info")
+	adversaryIdx := 0
+
+	// (1, 1) is not on the Edwards curve; assert that as a precondition so the
+	// test fails loudly if the curve check ever changes.
+	offX, offY := big.NewInt(1), big.NewInt(1)
+	if _, err := crypto.NewECPoint(tss.Edwards(), offX, offY); err == nil {
+		t.Fatal("precondition failed: (1,1) must be off the Edwards curve")
+	}
+
+	// Forge a single consistent commit/decommit pair over the off-curve point.
+	// Its C is injected into the adversary's round-1 message and its D into the
+	// round-2 message, so the honest party's DeCommit() opens successfully.
+	forged := commitments.NewHashCommitmentWithRandomness(big.NewInt(0xC0FFEE), offX, offY)
+
+	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+		wireBytes = tamperEdDSASignAnyField(wireBytes, "SignRound1Message", func(value []byte) []byte {
+			var msg SignRound1Message
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			msg.Commitment = forged.C.Bytes()
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+		wireBytes = tamperEdDSASignAnyField(wireBytes, "SignRound2Message", func(value []byte) []byte {
+			var msg SignRound2Message
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			msg.DeCommitment = common.BigIntsToBytes(forged.D)
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+		return wireBytes
+	})
+
+	tssErr := runAdversarialEdDSASigning(t, updater)
+	require.NotNil(t, tssErr, "protocol must reject off-curve Rj with an error, not panic")
+	t.Logf("Error: %s", tssErr)
+	assert.Contains(t, tssErr.Error(), "NewECPoint(Rj)", "off-curve Rj should be rejected at NewECPoint")
 }
 
 func TestAdversarial_EdDSA_Sign_CorruptedSi(t *testing.T) {
