@@ -207,5 +207,12 @@ func TestAdversarial_EdDSA_Sign_CorruptedSi(t *testing.T) {
 	tssErr := runAdversarialEdDSASigning(t, updater)
 	require.NotNil(t, tssErr, "protocol should fail due to corrupted Si")
 	t.Logf("Error: %s", tssErr)
-	assert.Contains(t, tssErr.Error(), "signature verification failed")
+	// A corrupted S_i is caught by one of two gates: the [0, L) range check on
+	// the share (when the corruption pushes S out of range, with culprit
+	// attribution) or the final aggregate signature verification.
+	errStr := tssErr.Error()
+	assert.True(t,
+		strings.Contains(errStr, "signature share S out of range") ||
+			strings.Contains(errStr, "signature verification failed"),
+		"corrupted Si should be rejected by the S range check or final verification, got: %s", errStr)
 }

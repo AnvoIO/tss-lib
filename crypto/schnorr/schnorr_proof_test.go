@@ -9,6 +9,7 @@ package schnorr_test
 
 import (
 	"crypto/rand"
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -42,6 +43,26 @@ func TestSchnorrProofVerify(t *testing.T) {
 	res := proof.Verify(Session, X)
 
 	assert.True(t, res, "verify result must be true")
+}
+
+// TestSchnorrProofVerifyRejectsNonCanonicalT is a regression test for the
+// June 2026 hardening (J8): a proof scalar T outside [0, q) must be rejected,
+// even though it is congruent mod q to the canonical value.
+func TestSchnorrProofVerifyRejectsNonCanonicalT(t *testing.T) {
+	q := tss.EC().Params().N
+	u := common.GetRandomPositiveInt(rand.Reader, q)
+	X := crypto.ScalarBaseMult(tss.EC(), u)
+
+	proof, _ := NewZKProof(Session, u, X, rand.Reader)
+	// Canonical proof verifies.
+	assert.True(t, proof.Verify(Session, X))
+
+	// T + q is congruent mod q but non-canonical; must be rejected.
+	proof.T = new(big.Int).Add(proof.T, q)
+	assert.False(t, proof.Verify(Session, X), "non-canonical T (T+q) must be rejected")
+
+	// nil X must be rejected, not panic.
+	assert.False(t, proof.Verify(Session, nil), "nil X must be rejected")
 }
 
 func TestSchnorrProofVerifyBadX(t *testing.T) {

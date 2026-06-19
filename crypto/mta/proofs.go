@@ -152,6 +152,12 @@ func ProveBob(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTilde,
 }
 
 func ProofBobWCFromBytes(ec elliptic.Curve, bzs [][]byte) (*ProofBobWC, error) {
+	// ProofBobFromBytes accepts either 10 (ProofBob) or 12 (ProofBobWC) parts;
+	// ProofBobWC additionally reads bzs[10] and bzs[11], so require exactly 12
+	// here rather than trusting the caller to have validated the length.
+	if !common.NonEmptyMultiBytes(bzs, ProofBobWCBytesParts) {
+		return nil, fmt.Errorf("expected %d byte parts to construct ProofBobWC", ProofBobWCBytesParts)
+	}
 	proofBob, err := ProofBobFromBytes(bzs)
 	if err != nil {
 		return nil, err
@@ -192,7 +198,7 @@ func ProofBobFromBytes(bzs [][]byte) (*ProofBob, error) {
 // ProveBobWC.Verify implements verification of Bob's proof with check "VerifyMtawc_Bob" used in the MtA protocol from GG18Spec (9) Fig. 10.
 // an absent `X` verifies a proof generated without the X consistency check X = g^x
 func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTilde, h1, h2, c1, c2 *big.Int, X *crypto.ECPoint) bool {
-	if pk == nil || NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil {
+	if ec == nil || pk == nil || NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil {
 		return false
 	}
 

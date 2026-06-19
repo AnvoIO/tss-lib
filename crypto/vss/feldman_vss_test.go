@@ -91,6 +91,30 @@ func TestVerify(t *testing.T) {
 	}
 }
 
+// TestVerifyRejectsNonCanonicalShare is a regression test for the June 2026
+// hardening (J8): a share scalar outside [0, q) must be rejected even though it
+// is congruent mod q to the valid share (g^(s+q) == g^s would otherwise pass).
+func TestVerifyRejectsNonCanonicalShare(t *testing.T) {
+	num, threshold := 5, 3
+	q := tss.EC().Params().N
+
+	secret := common.GetRandomPositiveInt(rand.Reader, q)
+	ids := make([]*big.Int, 0)
+	for i := 0; i < num; i++ {
+		ids = append(ids, common.GetRandomPositiveInt(rand.Reader, q))
+	}
+
+	vs, shares, err := Create(tss.EC(), threshold, secret, ids, rand.Reader)
+	assert.NoError(t, err)
+
+	// Canonical share verifies.
+	assert.True(t, shares[0].Verify(tss.EC(), threshold, vs))
+
+	// share + q is congruent mod q but non-canonical; must be rejected.
+	inflated := &Share{Threshold: threshold, ID: shares[0].ID, Share: new(big.Int).Add(shares[0].Share, q)}
+	assert.False(t, inflated.Verify(tss.EC(), threshold, vs), "non-canonical share (s+q) must be rejected")
+}
+
 func TestReconstruct(t *testing.T) {
 	num, threshold := 5, 3
 
