@@ -54,12 +54,16 @@ func NewZKProof(Session []byte, x *big.Int, X *crypto.ECPoint, rand io.Reader) (
 
 // NewZKProof verifies a new Schnorr ZK proof of knowledge of the discrete logarithm (GG18Spec Fig. 16)
 func (pf *ZKProof) Verify(Session []byte, X *crypto.ECPoint) bool {
-	if pf == nil || !pf.ValidateBasic() {
+	if pf == nil || !pf.ValidateBasic() || X == nil {
 		return false
 	}
 	ec := X.Curve()
 	ecParams := ec.Params()
 	q := ecParams.N
+	// reject non-canonical proof scalar (T must be in [0, q))
+	if pf.T.Sign() < 0 || pf.T.Cmp(q) >= 0 {
+		return false
+	}
 	g := crypto.NewECPointNoCurveCheck(ec, ecParams.Gx, ecParams.Gy)
 
 	var c *big.Int
@@ -108,12 +112,16 @@ func NewZKVProof(Session []byte, V, R *crypto.ECPoint, s, l *big.Int, rand io.Re
 }
 
 func (pf *ZKVProof) Verify(Session []byte, V, R *crypto.ECPoint) bool {
-	if pf == nil || !pf.ValidateBasic() {
+	if pf == nil || !pf.ValidateBasic() || V == nil || R == nil {
 		return false
 	}
 	ec := V.Curve()
 	ecParams := ec.Params()
 	q := ecParams.N
+	// reject non-canonical proof scalars (T, U must be in [0, q))
+	if pf.T.Sign() < 0 || pf.T.Cmp(q) >= 0 || pf.U.Sign() < 0 || pf.U.Cmp(q) >= 0 {
+		return false
+	}
 	g := crypto.NewECPointNoCurveCheck(ec, ecParams.Gx, ecParams.Gy)
 
 	var c *big.Int

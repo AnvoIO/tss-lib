@@ -119,7 +119,7 @@ func NewProofFromBytes(bzs [][]byte) (*ProofMod, error) {
 }
 
 func (pf *ProofMod) Verify(Session []byte, N *big.Int) bool {
-	if pf == nil || !pf.ValidateBasic() {
+	if pf == nil || !pf.ValidateBasic() || N == nil {
 		return false
 	}
 	// N must be at least 2048 bits and odd (not prime)

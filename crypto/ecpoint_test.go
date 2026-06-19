@@ -143,6 +143,37 @@ func TestS256EcpointJsonSerialization(t *testing.T) {
 	assert.True(t, reflect.TypeOf(point.Curve()) == reflect.TypeOf(umpoint.Curve()))
 }
 
+// TestNewECPointRejectsNonCanonicalCoords is a regression test for SRC-2026-573:
+// coordinates outside [0, P) must be rejected even when they are congruent mod P
+// to a valid on-curve point. btcec/v2's IsOnCurve silently reduces such inputs.
+func TestNewECPointRejectsNonCanonicalCoords(t *testing.T) {
+	ec := btcec.S256()
+	P := ec.Params().P
+
+	pubKeyBytes, err := hex.DecodeString("03935336acb03b2b801d8f8ac5e92c56c4f6e93319901fdfffba9d340a874e2879")
+	assert.NoError(t, err)
+	pbk, err := btcec.ParsePubKey(pubKeyBytes)
+	assert.NoError(t, err)
+
+	// Canonical point is accepted.
+	_, err = NewECPoint(ec, pbk.X(), pbk.Y())
+	assert.NoError(t, err)
+
+	// x + P is congruent to x mod P, but is non-canonical and must be rejected.
+	xPlusP := new(big.Int).Add(pbk.X(), P)
+	_, err = NewECPoint(ec, xPlusP, pbk.Y())
+	assert.Error(t, err, "non-canonical X (x+P) must be rejected")
+
+	// Likewise for y + P.
+	yPlusP := new(big.Int).Add(pbk.Y(), P)
+	_, err = NewECPoint(ec, pbk.X(), yPlusP)
+	assert.Error(t, err, "non-canonical Y (y+P) must be rejected")
+
+	// Negative coordinates must be rejected.
+	_, err = NewECPoint(ec, new(big.Int).Neg(pbk.X()), pbk.Y())
+	assert.Error(t, err, "negative X must be rejected")
+}
+
 func TestEdwardsEcpointJsonSerialization(t *testing.T) {
 	ec := edwards.Edwards()
 	tss.RegisterCurve("ed25519", ec)

@@ -1229,3 +1229,317 @@ This section is the authoritative MR1 compatibility note for maintainers and int
 2. Some panic-style helpers (`Must*`) remain by design; only externally reachable crash paths in this audit scope were treated as vulnerabilities.
 3. Zeroization in Go remains best-effort due to GC/runtime constraints.
 4. Previously open supplemental closure items (`S1..S3`) are resolved in the pre-squash branch state (`690f45a`); for long-term traceability under squash merge, use MR `!1` plus the final squash commit SHA on `main`.
+
+---
+
+## Appendix B: June 2026 Boundary-Validation Update and Remediation
+
+This appendix documents a focused follow-up review performed in June 2026, after two
+upstream advisories (`SRC-2026-573`, `SRC-2026-644`) were cross-referenced against this
+fork, and a subsequent in-house audit of adversarial input validation at protocol message
+boundaries. It follows the same format and conventions as Appendix A and uses the `J`
+("June") finding prefix.
+
+### B.1 Metadata
+
+| Field | Value |
+|---|---|
+| Repository | `github.com/AnvoIO/tss-lib` (v3) |
+| Review Date | `2026-06-19` |
+| Base | `master` (`2471435`) |
+| Reviewed Branch | `security/2026-06-update` |
+| Security-fix Commit | `6cfe2d1` (`J1`, `J2`) |
+| Hardening Commit | `080b806` (`J3`–`J8`) |
+| Upstream Advisories | `SRC-2026-573`, `SRC-2026-644` (`bnb-chain/tss-lib`) |
+| Method | Cross-reference of upstream advisories + multi-agent audit of message-boundary input validation, with adversarial verification of every candidate finding |
+| **Audit and Fixes By** | Robert Capps - Stratovera LLC \<robert@stratovera.io\> |
+
+### B.2 Executive Summary
+
+Two issues (`J1`, `J2`) were identified by cross-referencing upstream advisories against
+this fork's independently-rewritten v3 codebase; both were genuine gaps in our code and are
+fixed in `6cfe2d1`. `J2` is a remotely-triggerable denial-of-service: a single malicious
+signing participant can crash an honest EdDSA signer with off-curve coordinates. `J1` is a
+non-canonical EC point acceptance gap (a `btcec/v2` `IsOnCurve` quirk that silently reduces
+out-of-range coordinates mod P).
+
+A subsequent in-house audit fanned out across every protocol message boundary
+(ECDSA/EdDSA keygen, signing, resharing) and the cryptographic deserialization surfaces,
+specifically targeting the bug class that `J1`/`J2` represent: **use-before-error-check**,
+**missing range/canonicality checks**, and **missing nil/length guards on unmarshalled
+peer input**. Every candidate finding was adversarially verified (refute-by-default). That
+verification found **no further exploitable vulnerability** — a result that corroborates
+that `J1`/`J2` were isolated gaps rather than the surface of a deeper hole. It did, however,
+surface six defense-in-depth and canonicality issues (`J3`–`J8`), several of them cases
+where one code path already enforces a check and a sibling path does not. Consistent with a
+"non-exploitable is still a defect" posture, all six are remediated in `080b806`. None of
+the `J3`–`J8` changes alters the protocol wire format.
+
+### B.3 Findings (`J1`–`J8`)
+
+| ID | Severity | Finding | Exploit Summary (pre-fix) | Verified Reachability | Final Status |
+|---|---|---|---|---|---|
+| J1 | High | Non-canonical EC point coordinates accepted in `isOnCurve` (`SRC-2026-573`) | Coordinates ≥ P that fit in 32 bytes are silently reduced mod P by `btcec/v2`, letting non-canonical point encodings pass the curve-equation check | Reachable (peer-supplied points) | Fixed (`6cfe2d1`) |
+| J2 | High | EdDSA signing round 3 nil-pointer dereference on off-curve `Rj` (`SRC-2026-644`) | A malicious party sends off-curve decommitment coordinates; `NewECPoint` returns `(nil, err)`, and `Rj.EightInvEight()` is called before the error check, panicking an honest signer (remote DoS) | Reachable (peer-supplied decommitment) | Fixed (`6cfe2d1`) |
+| J3 | Low | `eddsa/keygen` round 3 use-before-error-check on `UnFlattenECPoints` | Error from `UnFlattenECPoints` checked after the `EightInvEight()` loop | Not exploitable — `UnFlattenECPoints` returns a `nil` slice on error, so `range` is zero iterations; anti-pattern only | Fixed (`080b806`) |
+| J4 | Medium | `ProofBobWCFromBytes` trusts caller-validated length | `ProofBobFromBytes` accepts 10 **or** 12 parts; `ProofBobWCFromBytes` then indexes `bzs[10]`/`bzs[11]`, so a 10-part input would panic | Not reachable via protocol — `SignRound2Message.ValidateBasic` enforces exactly 12 parts first; latent API footgun | Fixed (`080b806`) |
+| J5 | Low | `ecdsa/signing` round 9 decommitment guard uses `&&` instead of `\|\|` | `if !ok && len(values) != 4` does not fire when `ok=true` but `len != 4`, then indexes `values[0..3]` | Not reachable — `ValidateBasic` exact-5 + hash verification guarantee `ok ⇒ len==4`; latent OOB, inconsistent with round 5/7 | Fixed (`080b806`) |
+| J6 | Low | Resharing saves non-canonical `Xi` (no mod-q reduction) | New-committee `newXi` accumulated with `big.Int.Add` (no `modQ`) and saved unreduced, unlike keygen which reduces `xi mod N` | Not exploitable — VSS `Verify` forces `share ≡ P(i) (mod q)` so the sum stays congruent to the correct key, and all downstream signing reduces mod q; produces non-canonical key shares only | Fixed (`080b806`) |
+| J7 | Low | Missing nil-guards on exported proof `Verify()` parameters | `Verify()` methods in schnorr/modproof/dlnproof/mta dereference pointer args (`X`, `V`, `R`, `N`, `h1`, `h2`, `ec`) without nil checks | Not reachable — every argument is non-nil by construction at all protocol call sites (`Unmarshal*` returns non-nil; `ec`/`bigR` are trusted local state) | Fixed (`080b806`) |
+| J8 | Low | Missing `[0, q)`/`[0, L)` canonicality checks on peer-supplied scalars | Schnorr proof scalars `T`/`U`, VSS `Share`, and EdDSA signature share `S` accepted without range validation; oversize `S` silently truncated to 32 bytes in encoding | Not exploitable — scalar multiplication reduces mod q so verification equations are unaffected; an out-of-range/truncated `S` yields an invalid aggregate caught by the final `edwards.Verify()`; cosmetic/non-canonical only | Fixed (`080b806`) |
+
+### B.4 Exploitation Summary (Pre-Fix Behavior)
+
+| ID | How it could be exploited | Impact |
+|---|---|---|
+| J1 | Malicious participant submits a point whose coordinate is ≥ P but < 2^256; `btcec/v2` reduces it mod P and accepts it as on-curve | Acceptance of non-canonical point encodings; defense-in-depth gap against malformed point material |
+| J2 | Malicious signing participant sends a round-2 decommitment that opens to off-curve coordinates; honest signer calls `EightInvEight()` on the resulting nil point | Remote denial-of-service: honest EdDSA signer process panics |
+| J3 | None — `range` over the `nil` slice returned on error executes zero iterations | No runtime effect; fragility if `UnFlattenECPoints` were later changed to return partial slices |
+| J4 | A 10-part `ProofBobWc` would reach `bzs[10]`/`bzs[11]`; blocked today by `ValidateBasic` enforcing exactly 12 | Latent index-out-of-bounds panic if the function is called outside the validated protocol path |
+| J5 | A decommitment opening with `ok=true` and `len(values) != 4`; impossible today because `ValidateBasic` pins exactly 5 parts and `DeCommit` verifies the hash | Latent index-out-of-bounds panic if the upstream length guard ever weakens |
+| J6 | Malicious old-committee member sends `share = P(i) + k·q`; passes VSS `Verify` and inflates the saved `Xi` representative | Non-canonical secret-share representation; no key corruption (congruence preserved, downstream reduces mod q) |
+| J7 | A `nil` pointer reaching a `Verify()` method; not producible from a validated protocol message | Latent nil-pointer panic only if these exported APIs are called directly with nil |
+| J8 | Out-of-range `T`/`U`/`Share` (congruent mod q) or oversize `S` (truncated to 32 bytes) | Non-canonical inputs normalized by the group law / caught by final signature verification; no soundness or forgery impact |
+
+### B.5 Fix Matrix
+
+| ID | Status | Fix Summary | Primary Files |
+|---|---|---|---|
+| J1 | **Fixed** | Reject coordinates outside `[0, P)` in `isOnCurve` before delegating to `IsOnCurve` | `crypto/ecpoint.go:127` |
+| J2 | **Fixed** | Check the `NewECPoint(Rj)` error before calling `EightInvEight()` | `eddsa/signing/round_3.go:55-59` |
+| J3 | **Fixed** | Move the `UnFlattenECPoints` error check before the `EightInvEight()` loop | `eddsa/keygen/round_3.go:84-90` |
+| J4 | **Fixed** | Enforce exactly `ProofBobWCBytesParts` (12) inside `ProofBobWCFromBytes` before indexing | `crypto/mta/proofs.go:154-161` |
+| J5 | **Fixed** | Change decommitment guard from `&&` to `\|\|` (matches round 5/7) | `ecdsa/signing/round_9.go:36` |
+| J6 | **Fixed** | Accumulate the new share via `modQ.Add` so saved `Xi` is canonical in `[0, q)` | `ecdsa/resharing/round_4_new_step_2.go:174`, `eddsa/resharing/round_4_new_step_2.go:89` |
+| J7 | **Fixed** | Add nil-guards to exported `Verify()` parameters | `crypto/schnorr/schnorr_proof.go:56,110`, `crypto/modproof/proof.go:122`, `crypto/dlnproof/proof.go:58`, `crypto/mta/proofs.go:201`, `crypto/mta/range_proof.go:110` |
+| J8 | **Fixed** | Reject non-canonical peer scalars: Schnorr `T`/`U` and VSS `Share` in `[0, q)`; EdDSA `S` in `[0, L)` at finalize | `crypto/schnorr/schnorr_proof.go:63,121`, `crypto/vss/feldman_vss.go:100`, `eddsa/signing/finalize.go:35-40` |
+
+### B.6 Detailed Remediation Notes
+
+#### J1: Non-canonical EC point coordinate acceptance (`SRC-2026-573`)
+
+Pre-fix issue:
+- `isOnCurve` delegated directly to `elliptic.Curve.IsOnCurve`. The `btcec/v2`
+  implementation silently reduces coordinates ≥ P (that fit in 32 bytes) modulo P, so a
+  non-canonical encoding of an on-curve point passes the curve-equation check.
+
+Implemented fix:
+- Added an explicit `[0, P)` range check on both coordinates in `isOnCurve` before the
+  underlying curve check (`crypto/ecpoint.go`). Regression test
+  `TestNewECPointRejectsNonCanonicalCoords` rejects `x+P`, `y+P`, and negative coordinates.
+
+Security effect:
+- Non-canonical point encodings are rejected at construction (`NewECPoint`), closing the
+  defense-in-depth gap for all peer-supplied points.
+
+#### J2: EdDSA signing round 3 nil-pointer dereference (`SRC-2026-644`)
+
+Pre-fix issue:
+- `Rj, err := crypto.NewECPoint(...)` was followed immediately by `Rj = Rj.EightInvEight()`
+  before the `if err != nil` check. Off-curve coordinates from a malicious party make
+  `NewECPoint` return `(nil, err)`, and the method call panics on the nil receiver.
+
+Implemented fix:
+- Reordered the error check to precede `EightInvEight()` (`eddsa/signing/round_3.go`).
+  Regression test `TestAdversarial_EdDSA_Sign_OffCurveRj` forges a consistent off-curve
+  commit/decommit pair so `DeCommit()` succeeds and `NewECPoint` is the gate; it was
+  verified to reproduce the nil-pointer panic without the fix.
+
+Security effect:
+- Eliminates a single-malicious-party remote denial-of-service against honest EdDSA signers.
+
+#### J3: `eddsa/keygen` use-before-error-check on `UnFlattenECPoints`
+
+Pre-fix issue:
+- The error from `UnFlattenECPoints` was checked after a loop that calls `EightInvEight()`
+  on each returned point. `UnFlattenECPoints` returns a `nil` slice (never a partial slice)
+  on error, so `range` executes zero iterations and no panic occurs — but the ordering is
+  the same anti-pattern as `J2` and diverges from the correct ordering in
+  `ecdsa/keygen/round_3.go`.
+
+Implemented fix:
+- Moved the error check before the loop, matching the ECDSA sibling and the `J2` fix.
+
+Security effect:
+- Removes a latent fragility; behavior is unchanged for all current inputs.
+
+#### J4: `ProofBobWCFromBytes` caller-trusted length
+
+Pre-fix issue:
+- `ProofBobFromBytes` accepts either 10 or 12 byte-parts (`ProofBob` vs `ProofBobWC`).
+  `ProofBobWCFromBytes` called it and then unconditionally read `bzs[10]` and `bzs[11]`,
+  so a 10-part input would panic. The protocol path is protected because
+  `SignRound2Message.ValidateBasic` enforces exactly 12 parts (`NonEmptyMultiBytes` is an
+  exact-length check), but the deserializer trusted its caller.
+
+Implemented fix:
+- `ProofBobWCFromBytes` now enforces `NonEmptyMultiBytes(bzs, ProofBobWCBytesParts)` (12)
+  before indexing. Regression test `TestProofBobWCFromBytesRejectsShortInput` confirms a
+  10-part input returns an error without panicking.
+
+Security effect:
+- Removes a latent index-out-of-bounds footgun and makes the deserializer self-validating.
+
+#### J5: `ecdsa/signing` round 9 decommitment guard operator
+
+Pre-fix issue:
+- The guard `if !ok && len(values) != 4` only fires when both conditions hold. If a
+  decommitment verified (`ok=true`) but returned an unexpected element count, the code would
+  index `values[0..3]` and panic. This is unreachable today (`ValidateBasic` pins exactly 5
+  parts and `DeCommit` verifies the hash, so `ok ⇒ len==4`), and is inconsistent with the
+  correct `||` guards in round 5 and round 7.
+
+Implemented fix:
+- Changed `&&` to `||`, matching the sibling rounds.
+
+Security effect:
+- Removes a latent index-out-of-bounds panic and aligns the defensive pattern across rounds.
+
+#### J6: Non-canonical `Xi` in resharing
+
+Pre-fix issue:
+- New-committee parties accumulated peer-supplied shares with `new(big.Int).Add(newXi,
+  sharej.Share)` and saved the result as `Xi` without reducing mod q, unlike keygen which
+  saves `Mod(xi, N)`. A malicious old-committee party sending `share = P(i) + k·q` passes
+  VSS `Verify` (since `g^(P(i)+k·q) = g^P(i)`) and inflates the saved representative. This is
+  not a key-corruption bug — `Verify` forces `share ≡ P(i) (mod q)`, so the sum stays
+  congruent to the correct key, and all downstream signing reduces mod q — but the stored
+  share is non-canonical.
+
+Implemented fix:
+- Accumulate via the existing `modQ` (`modQ.Add`) in both ECDSA and EdDSA resharing round 4,
+  so the saved `Xi` is canonical in `[0, q)`, matching keygen. Complemented by the `J8` VSS
+  range check, which now rejects an out-of-range share before accumulation.
+
+Security effect:
+- Saved key shares are canonical and consistent with the keygen path; defense-in-depth
+  against non-canonical share injection.
+
+#### J7: Missing nil-guards on exported proof `Verify()` parameters
+
+Pre-fix issue:
+- `ZKProof.Verify`/`ZKVProof.Verify`, `ProofMod.Verify`, `dlnproof.Proof.Verify`,
+  `ProofBobWC.Verify`, and `RangeProofAlice.Verify` dereferenced pointer parameters without
+  nil checks. At every protocol call site these arguments are non-nil by construction
+  (`Unmarshal*` returns non-nil `*big.Int`; `ec` and `bigR` are trusted local state), so no
+  protocol path can reach them with nil — but the exported APIs were not defensively guarded.
+
+Implemented fix:
+- Added nil-guards for the previously-unchecked parameters (`X`; `V`, `R`; `N`; `h1`, `h2`,
+  `N`; `ec`).
+
+Security effect:
+- Exported verification APIs now fail closed on nil input instead of panicking if called
+  directly outside the validated protocol flow.
+
+#### J8: Non-canonical peer-supplied scalars
+
+Pre-fix issue:
+- Schnorr proof scalars `T`/`U`, VSS `Share`, and the EdDSA signature share `S` were
+  unmarshalled from peer bytes via `SetBytes` and used without `[0, q)` (resp. `[0, L)`)
+  validation. Out-of-range values are congruent mod q to a canonical value, so the
+  verification equations still hold (scalar multiplication reduces mod q); an oversize `S`
+  is silently truncated to 32 bytes by `bigIntToEncodedBytes` and then caught by the final
+  `edwards.Verify()`. No soundness or forgery impact, but the inputs are non-canonical.
+
+Implemented fix:
+- Reject `T`/`U` outside `[0, q)` in `schnorr.ZKProof.Verify`/`ZKVProof.Verify`; reject a
+  `Share` outside `[0, q)` in `vss.Share.Verify` (a single chokepoint covering keygen and
+  resharing); reject `S` outside `[0, L)` in EdDSA `finalize` (also closing the silent
+  truncation). Regression tests: `TestSchnorrProofVerifyRejectsNonCanonicalT`,
+  `TestVerifyRejectsNonCanonicalShare`; the existing `TestAdversarial_EdDSA_Sign_CorruptedSi`
+  now accepts rejection by either the `S` range check or final signature verification.
+
+Security effect:
+- Peer-supplied scalars are constrained to their canonical range at the verification
+  chokepoints, eliminating non-canonical encodings and the silent `S` truncation path.
+
+### B.7 Consolidated Finding Status (June 2026)
+
+| ID | Severity | Finding | Status |
+|---|---|---|---|
+| J1 | High | Non-canonical EC point coordinates accepted (`SRC-2026-573`) | Fixed (`6cfe2d1`) |
+| J2 | High | EdDSA signing round 3 nil-pointer dereference (`SRC-2026-644`) | Fixed (`6cfe2d1`) |
+| J3 | Low | `eddsa/keygen` use-before-error-check on `UnFlattenECPoints` | Fixed (`080b806`) |
+| J4 | Medium | `ProofBobWCFromBytes` caller-trusted length (latent OOB) | Fixed (`080b806`) |
+| J5 | Low | `ecdsa/signing` round 9 decommitment guard operator (latent OOB) | Fixed (`080b806`) |
+| J6 | Low | Non-canonical `Xi` in resharing (no mod-q reduction) | Fixed (`080b806`) |
+| J7 | Low | Missing nil-guards on exported proof `Verify()` parameters | Fixed (`080b806`) |
+| J8 | Low | Missing `[0, q)`/`[0, L)` canonicality checks on peer scalars | Fixed (`080b806`) |
+
+### B.8 Methodology Note
+
+The `J3`–`J8` set was produced by a multi-agent audit: independent readers swept each
+protocol package and the cryptographic deserialization surfaces for the three target
+sub-classes (use-before-error-check, missing range/canonicality checks, missing nil/length
+guards), and each candidate finding was then handed to an independent adversarial verifier
+instructed to refute it by default and confirm reachability against the actual code. The
+verification pass downgraded every candidate from "exploitable" to "defense-in-depth /
+canonicality only," including two initially rated critical (`J4`, `J6`). No
+attacker-reachable vulnerability beyond `J1`/`J2` was found. All findings are nonetheless
+remediated, consistent with the project's posture that non-exploitable defects are still
+defects.
+
+### B.9 Validation and Verification Steps
+
+Run from repository root:
+
+```bash
+cd <repo-root>
+mkdir -p "${TMPDIR:-/tmp}/gocache"
+export GOCACHE="${TMPDIR:-/tmp}/gocache"
+```
+
+#### B.9.1 Verify J1/J2 fixes (point validation + round-3 ordering)
+
+```bash
+go test ./crypto -run TestNewECPointRejectsNonCanonicalCoords -count=1 -v
+go test ./eddsa/signing -run TestAdversarial_EdDSA_Sign_OffCurveRj -count=1 -v
+```
+
+Expected:
+- Non-canonical coordinates (`x+P`, `y+P`, negative) are rejected.
+- The off-curve `Rj` adversarial test passes (and reproduces a nil-pointer panic if the
+  round-3 ordering fix is reverted).
+
+#### B.9.2 Verify J4/J8 fixes (deserializer + scalar canonicality)
+
+```bash
+go test ./crypto/mta -run TestProofBobWCFromBytesRejectsShortInput -count=1 -v
+go test ./crypto/schnorr -run TestSchnorrProofVerifyRejectsNonCanonicalT -count=1 -v
+go test ./crypto/vss -run TestVerifyRejectsNonCanonicalShare -count=1 -v
+```
+
+Expected:
+- A 10-part `ProofBobWC` input returns an error without panicking.
+- A Schnorr proof scalar `T+q` and a VSS share `s+q` (both congruent mod q) are rejected.
+
+#### B.9.3 Verify J3/J5/J6/J7 fixes (compile + protocol regression)
+
+```bash
+go build ./...
+go test ./ecdsa/signing ./ecdsa/resharing ./eddsa/keygen ./eddsa/resharing -count=1
+```
+
+Expected:
+- Build succeeds; protocol suites pass with the reordered/guarded code paths.
+
+#### B.9.4 Verify full regression suites for this update cycle
+
+```bash
+go test ./...
+go build -tags insecure_noproofs ./...
+```
+
+Expected:
+- Full default-build suite passes; the `insecure_noproofs` build compiles.
+
+### B.10 Residual Risk Notes
+
+1. `J3`–`J8` are defense-in-depth and canonicality fixes; none addresses a demonstrated
+   exploitable vulnerability, and none changes the protocol wire format.
+2. `J1`/`J2` were genuine gaps unique to this fork's v3 rewrite, identified by
+   cross-referencing upstream advisories; integrators on earlier branches should treat the
+   `J2` remote-DoS as the priority item.
+3. The multi-agent audit scope was message-boundary input validation; it did not re-audit
+   the cryptographic-soundness or memory-hygiene domains covered in the February 2026 cycle.
