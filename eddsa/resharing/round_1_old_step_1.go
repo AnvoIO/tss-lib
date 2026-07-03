@@ -106,12 +106,14 @@ func (round *round1) Update() (bool, *tss.Error) {
 		}
 		round.oldOK[j] = true
 
-		if round.temp.dgRound1Messages[0] == nil {
-			ret = false
-			continue
-		}
-		// save the eddsa pub received from the old committee
-		r1msg := round.temp.dgRound1Messages[0].Content().(*DGRound1Message)
+		// save the eddsa pub received from the old committee (this old party j,
+		// not slot 0). Reading the loop's current message is what makes the
+		// anomaly check below actually compare each old party's advertised key
+		// against the first one seen; reading dgRound1Messages[0] on every
+		// iteration made the check a no-op and let a malicious old slot-0 party
+		// swap the reshared public key (SRC-2026-1155). msg is already proven
+		// non-nil by the CanAccept guard above.
+		r1msg := msg.Content().(*DGRound1Message)
 		candidate, err := r1msg.UnmarshalEDDSAPub(round.Params().EC())
 		if err != nil {
 			return false, round.WrapError(errors.New("unable to unmarshal the eddsa pub key"), msg.GetFrom())
