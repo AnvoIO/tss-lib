@@ -63,6 +63,18 @@ func (round *round4) Start() *tss.Error {
 			r2msg1.UnmarshalNTilde(),
 			r2msg1.UnmarshalH1(),
 			r2msg1.UnmarshalH2()
+		// Enforce the same Paillier/NTilde modulus size floor that keygen applies
+		// (ecdsa/keygen/round_2.go). Without it a malicious new-committee member
+		// could seat a small, factorable N/NTilde as the reshared group's long-term
+		// auxiliary key material; that NTilde is later used as the Pedersen parameter
+		// for the signing MtA range proofs, so a known factorization breaks their
+		// statistical hiding and leaks honest signers' witnesses.
+		if paiPK.N.BitLen() != paillierBitsLen {
+			return round.WrapError(errors.New("got paillier modulus with insufficient bits for this party"), msg.GetFrom())
+		}
+		if NTildej.BitLen() != paillierBitsLen {
+			return round.WrapError(errors.New("got NTildej with insufficient bits for this party"), msg.GetFrom())
+		}
 		if H1j.Cmp(H2j) == 0 {
 			return round.WrapError(errors.New("h1j and h2j were equal for this party"), msg.GetFrom())
 		}
