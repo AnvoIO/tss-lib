@@ -74,12 +74,18 @@ func (p *Proof) Verify(Session []byte, h1, h2, N *big.Int) bool {
 		return false
 	}
 	for i := range p.T {
+		if p.T[i] == nil {
+			return false
+		}
 		a := new(big.Int).Mod(p.T[i], N)
 		if a.Cmp(one) != 1 || a.Cmp(N) != -1 {
 			return false
 		}
 	}
 	for i := range p.Alpha {
+		if p.Alpha[i] == nil {
+			return false
+		}
 		a := new(big.Int).Mod(p.Alpha[i], N)
 		if a.Cmp(one) != 1 || a.Cmp(N) != -1 {
 			return false
