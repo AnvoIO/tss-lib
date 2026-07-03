@@ -81,7 +81,7 @@ func (pf *ZKProof) Verify(Session []byte, X *crypto.ECPoint) bool {
 }
 
 func (pf *ZKProof) ValidateBasic() bool {
-	return pf.T != nil && pf.Alpha != nil
+	return pf.T != nil && pf.Alpha != nil && pf.Alpha.ValidateBasic()
 }
 
 // NewZKProof constructs a new Schnorr ZK proof of knowledge s_i, l_i such that V_i = R^s_i, g^l_i (GG18Spec Fig. 17)
