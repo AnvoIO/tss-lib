@@ -41,7 +41,11 @@ func (round *round9) Start() *tss.Error {
 		TX, TY = round.Params().EC().Add(TX, TY, TjX, TjY)
 	}
 	if UX.Cmp(TX) != 0 || UY.Cmp(TY) != 0 {
-		return round.WrapError(errors.New("U doesn't equal T"), round.PartyID())
+		// The aggregate U != T means some party decommitted an inconsistent
+		// bigVj/bigAj; the summed mismatch cannot pinpoint which one, but it is
+		// never the party running this check, so attribute the other signers
+		// rather than falsely blaming ourselves (was: round.PartyID()).
+		return round.WrapError(errors.New("U doesn't equal T"), round.Parties().IDs().Exclude(round.PartyID())...)
 	}
 
 	r9msg := NewSignRound9Message(round.PartyID(), round.temp.si)
