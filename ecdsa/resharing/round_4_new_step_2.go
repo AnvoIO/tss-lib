@@ -63,6 +63,18 @@ func (round *round4) Start() *tss.Error {
 			r2msg1.UnmarshalNTilde(),
 			r2msg1.UnmarshalH1(),
 			r2msg1.UnmarshalH2()
+		// Enforce the same Paillier/NTilde modulus size floor that keygen applies
+		// (ecdsa/keygen/round_2.go). Without it a malicious new-committee member
+		// could seat a small, factorable N/NTilde as the reshared group's long-term
+		// auxiliary key material; that NTilde is later used as the Pedersen parameter
+		// for the signing MtA range proofs, so a known factorization breaks their
+		// statistical hiding and leaks honest signers' witnesses.
+		if paiPK.N.BitLen() != paillierBitsLen {
+			return round.WrapError(errors.New("got paillier modulus with insufficient bits for this party"), msg.GetFrom())
+		}
+		if NTildej.BitLen() != paillierBitsLen {
+			return round.WrapError(errors.New("got NTildej with insufficient bits for this party"), msg.GetFrom())
+		}
 		if H1j.Cmp(H2j) == 0 {
 			return round.WrapError(errors.New("h1j and h2j were equal for this party"), msg.GetFrom())
 		}
@@ -192,7 +204,11 @@ func (round *round4) Start() *tss.Error {
 
 	// 14.
 	if !Vc[0].Equals(round.save.ECDSAPub) {
-		return round.WrapError(errors.New("assertion failed: V_0 != y"), round.PartyID())
+		// The reshared aggregate key does not match the old public key, which means
+		// some old committee member decommitted an inconsistent VSS constant. The
+		// aggregate sum cannot pinpoint which one, so attribute the whole old
+		// committee rather than falsely blaming ourselves (was: round.PartyID()).
+		return round.WrapError(errors.New("assertion failed: V_0 != y (an old party committed an inconsistent VSS constant)"), round.OldParties().IDs()...)
 	}
 
 	// 15-19.
@@ -215,7 +231,9 @@ func (round *round4) Start() *tss.Error {
 		newBigXjs[j] = newBigXj
 	}
 	if len(paiProofCulprits) > 0 {
-		return round.WrapError(errors2.Wrapf(err, "newBigXj.Add(Vc[c].ScalarMult(z))"), paiProofCulprits...)
+		// Build a fresh (non-nil) cause: err may have been reset to nil by a later
+		// successful Add, which previously surfaced as an uninformative "Error is nil".
+		return round.WrapError(errors.New("newBigXj.Add(Vc[c].ScalarMult(z)) failed"), paiProofCulprits...)
 	}
 
 	round.temp.newXi = newXi
