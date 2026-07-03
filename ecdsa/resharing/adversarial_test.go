@@ -293,6 +293,49 @@ func TestAdversarial_Resharing_SmallNTildeRejected(t *testing.T) {
 	assert.True(t, len(tssErr.Culprits()) > 0, "should attribute the culprit")
 }
 
+// TestAdversarial_Resharing_SsidSlotZeroMisattribution covers a malicious OLD-
+// committee party seated at index 0 — the slot the new committee's round-2 SSID
+// consistency check uses as its (unvalidated) reference. Pre-fix, a mismatch
+// between the forged slot-0 ssid and the first honest old party attributed the
+// abort solely to that honest party (Pj), letting the slot-0 adversary force an
+// abort that frames an honest node. The fix names both parties in the
+// disagreeing pair, so the actual adversary (old index 0) now appears in the
+// culprit set. Remove the `anchor` culprit and this assertion fails (the slot-0
+// adversary escapes attribution).
+func TestAdversarial_Resharing_SsidSlotZeroMisattribution(t *testing.T) {
+	setUp("info")
+	adversaryIdx := 0 // OLD-committee member sending DGRound1Message
+
+	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+		return tamperResharingAnyField(wireBytes, "DGRound1Message", func(value []byte) []byte {
+			var msg DGRound1Message
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			// Honest old parties all advertise the same deterministic ssid, so a
+			// forged prefix diverges from every other slot and trips the check.
+			msg.Ssid = append([]byte("forged-ssid"), msg.GetSsid()...)
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+	})
+
+	tssErr := runAdversarialResharing(t, updater)
+	require.NotNil(t, tssErr, "resharing must reject an inconsistent old-committee SSID")
+	t.Logf("Error: %s", tssErr)
+	assert.Contains(t, tssErr.Error(), "ssid mismatch", "should abort on the SSID consistency check")
+	foundAdversary := false
+	for _, c := range tssErr.Culprits() {
+		if c.Index == adversaryIdx {
+			foundAdversary = true
+		}
+	}
+	assert.True(t, foundAdversary, "slot-0 adversary must be attributed, not just the honest mismatching party")
+}
+
 func TestAdversarial_Resharing_MultipleCorruptedSharesReportsMultipleCulprits(t *testing.T) {
 	setUp("info")
 	adversaries := map[int]struct{}{
