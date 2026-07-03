@@ -174,6 +174,58 @@ func TestNewECPointRejectsNonCanonicalCoords(t *testing.T) {
 	assert.Error(t, err, "negative X must be rejected")
 }
 
+// TestScalarMultCheckedRejectsPointAtInfinity verifies the non-panicking
+// variants return an error (not panic) when the scalar reduces to 0 mod the
+// group order, i.e. the result is the point at infinity. On secp256k1 the
+// identity encodes as the off-curve (0,0), so NewECPoint rejects it; the checked
+// API surfaces that as an error while the legacy ScalarMult/ScalarBaseMult panic.
+func TestScalarMultCheckedRejectsPointAtInfinity(t *testing.T) {
+	ec := tss.S256()
+	N := ec.Params().N
+
+	G := ScalarBaseMult(ec, big.NewInt(1)) // the base point, a valid ECPoint
+
+	// Scalars that drive the result to the identity: 0 and the group order N
+	// (and any multiple of N).
+	for _, name := range []string{"zero", "order-N", "order-2N"} {
+		var k *big.Int
+		switch name {
+		case "zero":
+			k = big.NewInt(0)
+		case "order-N":
+			k = new(big.Int).Set(N)
+		case "order-2N":
+			k = new(big.Int).Lsh(N, 1)
+		}
+
+		t.Run("ScalarMultChecked/"+name, func(t *testing.T) {
+			_, err := G.ScalarMultChecked(k)
+			assert.Error(t, err, "k ≡ 0 mod N must return an error, not the identity")
+		})
+		t.Run("ScalarBaseMultChecked/"+name, func(t *testing.T) {
+			_, err := ScalarBaseMultChecked(ec, k)
+			assert.Error(t, err, "k ≡ 0 mod N must return an error, not the identity")
+		})
+
+		// The legacy panicking variants must still panic on the same input,
+		// confirming the checked API is the safe alternative for these scalars.
+		t.Run("ScalarMult-panics/"+name, func(t *testing.T) {
+			assert.Panics(t, func() { G.ScalarMult(k) })
+		})
+		t.Run("ScalarBaseMult-panics/"+name, func(t *testing.T) {
+			assert.Panics(t, func() { ScalarBaseMult(ec, k) })
+		})
+	}
+
+	// A valid in-range scalar must still succeed via the checked API.
+	kOK := big.NewInt(2)
+	got, err := G.ScalarMultChecked(kOK)
+	assert.NoError(t, err)
+	assert.NotNil(t, got)
+	want := ScalarBaseMult(ec, big.NewInt(2)) // 2*G
+	assert.True(t, got.Equals(want), "2*G via ScalarMultChecked should equal ScalarBaseMult(2)")
+}
+
 func TestEdwardsEcpointJsonSerialization(t *testing.T) {
 	ec := edwards.Edwards()
 	tss.RegisterCurve("ed25519", ec)
