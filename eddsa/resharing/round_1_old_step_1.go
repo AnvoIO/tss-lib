@@ -38,7 +38,13 @@ func (round *round1) Start() *tss.Error {
 	if !round.ReSharingParams().IsOldCommittee() {
 		return nil
 	}
-	round.allOldOK()
+	// Fix for bnb-chain/tss-lib#128: Only call allOldOK() when the party is
+	// exclusively in the old committee. When a party is in BOTH committees,
+	// premature marking causes round.save.EDDSAPub to remain uninitialized,
+	// leading to nil pointer dereferences in subsequent rounds.
+	if !round.ReSharingParams().IsNewCommittee() {
+		round.allOldOK()
+	}
 
 	Pi := round.PartyID()
 	i := Pi.Index
