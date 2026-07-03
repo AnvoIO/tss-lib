@@ -13,6 +13,6 @@ import (
 // RejectionSample implements the rejection sampling logic for converting a
 // SHA512/256 hash to a value between 0-q
 func RejectionSample(q *big.Int, eHash *big.Int) *big.Int { // e' = eHash
-	e := eHash.Mod(eHash, q)
-	return e
+	// Reduce into a fresh big.Int; do not mutate the caller's eHash in place.
+	return new(big.Int).Mod(eHash, q)
 }
