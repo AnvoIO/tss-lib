@@ -59,8 +59,10 @@ func (round *round5) Start() *tss.Error {
 				}
 				if ok := proof.Verify(ContextI, round.EC(), round.save.PaillierPKs[j].N, round.save.NTildei,
 					round.save.H1i, round.save.H2i); !ok {
-					common.Logger.Warningf("facProof verify failed for party %s", msg.GetFrom(), err)
-					return round.WrapError(err, round.NewParties().IDs()[j])
+					// err is nil in this branch (UnmarshalFacProof succeeded); build a
+					// real cause so the failure is not surfaced as "Error is nil".
+					common.Logger.Warningf("facProof verification failed for party %s", msg.GetFrom())
+					return round.WrapError(errors.New("facProof verification failed"), round.NewParties().IDs()[j])
 				}
 			}
 

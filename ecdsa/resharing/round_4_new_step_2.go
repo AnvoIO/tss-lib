@@ -192,7 +192,11 @@ func (round *round4) Start() *tss.Error {
 
 	// 14.
 	if !Vc[0].Equals(round.save.ECDSAPub) {
-		return round.WrapError(errors.New("assertion failed: V_0 != y"), round.PartyID())
+		// The reshared aggregate key does not match the old public key, which means
+		// some old committee member decommitted an inconsistent VSS constant. The
+		// aggregate sum cannot pinpoint which one, so attribute the whole old
+		// committee rather than falsely blaming ourselves (was: round.PartyID()).
+		return round.WrapError(errors.New("assertion failed: V_0 != y (an old party committed an inconsistent VSS constant)"), round.OldParties().IDs()...)
 	}
 
 	// 15-19.
@@ -215,7 +219,9 @@ func (round *round4) Start() *tss.Error {
 		newBigXjs[j] = newBigXj
 	}
 	if len(paiProofCulprits) > 0 {
-		return round.WrapError(errors2.Wrapf(err, "newBigXj.Add(Vc[c].ScalarMult(z))"), paiProofCulprits...)
+		// Build a fresh (non-nil) cause: err may have been reset to nil by a later
+		// successful Add, which previously surfaced as an uninformative "Error is nil".
+		return round.WrapError(errors.New("newBigXj.Add(Vc[c].ScalarMult(z)) failed"), paiProofCulprits...)
 	}
 
 	round.temp.newXi = newXi
