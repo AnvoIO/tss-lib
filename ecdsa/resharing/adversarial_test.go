@@ -7,6 +7,7 @@
 package resharing_test
 
 import (
+	"math/big"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -215,6 +216,124 @@ func TestAdversarial_Resharing_V0MismatchPublicKey(t *testing.T) {
 	require.NotNil(t, tssErr, "protocol should fail due to V_0 != y mismatch")
 	t.Logf("Error: %s", tssErr)
 	assert.True(t, len(tssErr.Culprits()) > 0, "should have culprits")
+}
+
+// TestAdversarial_Resharing_SmallPaillierModulusRejected pins the round-4 modulus
+// size guard added to close the resharing bit-length gap: unlike keygen
+// (ecdsa/keygen/round_2.go), the new committee's round-4 validation did not enforce
+// the 2048-bit floor on peer-supplied Paillier/NTilde material. The security
+// rationale is that a malicious new-committee member could seat a small (though
+// still validly-structured) modulus as the reshared group's long-term auxiliary
+// key — later used as the Pedersen parameter for the signing MtA range proofs,
+// whose hiding then breaks and leaks honest signers' witnesses.
+//
+// Fidelity note: the mod-proof and DLN proofs independently reject *malformed*
+// material, so this wire-tamper cannot fully fail-open (a true exploit needs a
+// small-but-valid Blum modulus with a valid mod-proof bound to the session ssid,
+// which a wire-tamper cannot forge). What this test guarantees is that the
+// dedicated size guard is present and fires with a specific "insufficient bits"
+// error attributing the sender: remove the guard and this asserted behavior is
+// lost (the failure degrades to the generic proof-verification error).
+func TestAdversarial_Resharing_SmallPaillierModulusRejected(t *testing.T) {
+	setUp("info")
+	adversaryIdx := 0 // new-committee member sending DGRound2Message1
+
+	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+		return tamperResharingAnyField(wireBytes, "DGRound2Message1", func(value []byte) []byte {
+			var msg DGRound2Message1
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			// Non-empty (so ValidateBasic passes) but far below 2048 bits.
+			msg.PaillierN = new(big.Int).SetInt64(0x10001).Bytes()
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+	})
+
+	tssErr := runAdversarialResharing(t, updater)
+	require.NotNil(t, tssErr, "resharing must reject a sub-2048-bit Paillier modulus")
+	t.Logf("Error: %s", tssErr)
+	assert.Contains(t, tssErr.Error(), "insufficient bits", "size guard must reject on the Paillier modulus floor")
+	assert.True(t, len(tssErr.Culprits()) > 0, "should attribute the culprit")
+}
+
+// TestAdversarial_Resharing_SmallNTildeRejected is the NTilde counterpart: the
+// ZK-commitment auxiliary NTilde must also meet the 2048-bit floor in resharing
+// round 4, matching keygen. NTilde is the security-critical field — no mod-proof
+// covers it and the DLN proof bounds the h1/h2 relation, not the modulus size, so
+// this guard is NTilde's only size defense in every configuration. Same fidelity
+// note as above: assert the guard's specific rejection, which vanishes if removed.
+func TestAdversarial_Resharing_SmallNTildeRejected(t *testing.T) {
+	setUp("info")
+	adversaryIdx := 0 // new-committee member sending DGRound2Message1
+
+	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+		return tamperResharingAnyField(wireBytes, "DGRound2Message1", func(value []byte) []byte {
+			var msg DGRound2Message1
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			msg.NTilde = new(big.Int).SetInt64(0x10001).Bytes()
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+	})
+
+	tssErr := runAdversarialResharing(t, updater)
+	require.NotNil(t, tssErr, "resharing must reject a sub-2048-bit NTilde")
+	t.Logf("Error: %s", tssErr)
+	assert.Contains(t, tssErr.Error(), "insufficient bits", "size guard must reject on the NTilde floor")
+	assert.True(t, len(tssErr.Culprits()) > 0, "should attribute the culprit")
+}
+
+// TestAdversarial_Resharing_SsidSlotZeroMisattribution covers a malicious OLD-
+// committee party seated at index 0 — the slot the new committee's round-2 SSID
+// consistency check uses as its (unvalidated) reference. Pre-fix, a mismatch
+// between the forged slot-0 ssid and the first honest old party attributed the
+// abort solely to that honest party (Pj), letting the slot-0 adversary force an
+// abort that frames an honest node. The fix names both parties in the
+// disagreeing pair, so the actual adversary (old index 0) now appears in the
+// culprit set. Remove the `anchor` culprit and this assertion fails (the slot-0
+// adversary escapes attribution).
+func TestAdversarial_Resharing_SsidSlotZeroMisattribution(t *testing.T) {
+	setUp("info")
+	adversaryIdx := 0 // OLD-committee member sending DGRound1Message
+
+	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+		return tamperResharingAnyField(wireBytes, "DGRound1Message", func(value []byte) []byte {
+			var msg DGRound1Message
+			if err := proto.Unmarshal(value, &msg); err != nil {
+				return value
+			}
+			// Honest old parties all advertise the same deterministic ssid, so a
+			// forged prefix diverges from every other slot and trips the check.
+			msg.Ssid = append([]byte("forged-ssid"), msg.GetSsid()...)
+			out, err := proto.Marshal(&msg)
+			if err != nil {
+				return value
+			}
+			return out
+		})
+	})
+
+	tssErr := runAdversarialResharing(t, updater)
+	require.NotNil(t, tssErr, "resharing must reject an inconsistent old-committee SSID")
+	t.Logf("Error: %s", tssErr)
+	assert.Contains(t, tssErr.Error(), "ssid mismatch", "should abort on the SSID consistency check")
+	foundAdversary := false
+	for _, c := range tssErr.Culprits() {
+		if c.Index == adversaryIdx {
+			foundAdversary = true
+		}
+	}
+	assert.True(t, foundAdversary, "slot-0 adversary must be attributed, not just the honest mismatching party")
 }
 
 func TestAdversarial_Resharing_MultipleCorruptedSharesReportsMultipleCulprits(t *testing.T) {

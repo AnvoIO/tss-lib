@@ -120,6 +120,17 @@ The transport layer is your responsibility. You must provide:
 
 ## Releases
 
+### v3.0.2: July 2026 resharing-continuity and protocol-logic update (non-breaking)
+
+Security patch. No API or wire-format changes — interoperable with honest
+v3.0.0/v3.0.1 peers. Closes a resharing-continuity authentication bypass
+(`SRC-2026-1155`) and a resharing Paillier/`NTilde` modulus-size gap, ports the
+upstream dual-committee resharing fix (`bnb-chain/tss-lib#128`) to EdDSA, corrects
+abort attribution in several resharing/signing paths, and adds a batch of
+defense-in-depth guards. Found by a multi-agent audit of resharing continuity and
+protocol-logic invariants. See the [`CHANGELOG`](./CHANGELOG.md) and
+[Appendix C of the audit report](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update).
+
 ### v3.0.1: June 2026 boundary-validation security update (non-breaking)
 
 Security patch. No API or wire-format changes — interoperable with honest v3.0.0
@@ -171,6 +182,8 @@ tss-lib/
 ```
 
 ## Security audits
+
+**Stratovera LLC (July 2026)** -- Resharing-continuity and protocol-logic audit. A multi-agent review of the resharing continuity invariants and the protocol-logic bug class (wrong indices, no-op consistency checks, unaborted proof failures, mis-attributed aborts) across ECDSA/EdDSA keygen, signing, and resharing, with adversarial verification of every candidate. Fixed a resharing-continuity authentication bypass (`SRC-2026-1155`) and a resharing Paillier/`NTilde` modulus-size gap, ported the upstream dual-committee resharing fix (`bnb-chain/tss-lib#128`) to EdDSA, corrected abort attribution in several paths, and added defense-in-depth guards. Released in v3.0.2. Documented in [Appendix C](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update) of the report below.
 
 **Stratovera LLC (June 2026)** -- Follow-up boundary-validation audit, cross-referencing upstream advisories (`SRC-2026-573`, `SRC-2026-644`) against this fork and running a multi-agent review of adversarial input validation at every protocol message boundary. Fixed a remote denial-of-service (nil-pointer dereference on an off-curve point in EdDSA signing) and non-canonical EC point acceptance, plus six defense-in-depth / canonicality hardenings (`J1`–`J8`); no further exploitable vulnerability was found. Released in v3.0.1. Documented in [Appendix B](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation) of the report below.
 
