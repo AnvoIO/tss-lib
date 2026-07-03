@@ -21,6 +21,10 @@ import (
 
 var zero = big.NewInt(0)
 
+// paillierBitsLen mirrors ecdsa/keygen's modulus-size floor; the new committee
+// enforces it on peer-supplied Paillier/NTilde material in round 4.
+const paillierBitsLen = 2048
+
 func (round *round2) Start() *tss.Error {
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
