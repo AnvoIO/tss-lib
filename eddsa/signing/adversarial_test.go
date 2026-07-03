@@ -123,7 +123,18 @@ func TestAdversarial_EdDSA_Sign_InvalidDecommitment(t *testing.T) {
 	tssErr := runAdversarialEdDSASigning(t, updater)
 	require.NotNil(t, tssErr, "protocol should fail due to corrupted decommitment")
 	t.Logf("Error: %s", tssErr)
-	assert.True(t, len(tssErr.Culprits()) > 0 || strings.Contains(tssErr.Error(), "de-commitment"), "should identify failure")
+	assert.Contains(t, tssErr.Error(), "de-commitment", "should abort on the de-commitment check")
+	// The de-commitment C/D belong unambiguously to the malicious signer, so the
+	// failure must name it. Pre-fix these branches passed no culprit, leaving an
+	// honest coordinator unable to identify the griefer (un-attributable abort).
+	require.True(t, len(tssErr.Culprits()) > 0, "de-commitment failure must attribute the offending signer")
+	foundAdversary := false
+	for _, c := range tssErr.Culprits() {
+		if c.Index == adversaryIdx {
+			foundAdversary = true
+		}
+	}
+	assert.True(t, foundAdversary, "the malicious signer (index 0) must be named as the culprit")
 }
 
 // TestAdversarial_EdDSA_Sign_OffCurveRj is a regression test for SRC-2026-644:

@@ -46,10 +46,14 @@ func (round *round3) Start() *tss.Error {
 		cmtDeCmt := commitments.HashCommitDecommit{C: round.temp.cjs[j], D: r2msg.UnmarshalDeCommitment()}
 		ok, coordinates := cmtDeCmt.DeCommit()
 		if !ok {
-			return round.WrapError(errors.New("de-commitment verify failed"))
+			// C and D both belong unambiguously to Pj (its round-1 commitment
+			// and round-2 decommitment), so attribute the abort to Pj — matching
+			// the sibling NewECPoint/proof branches below. Blaming no one let a
+			// malicious signer grief honest signers with un-attributable aborts.
+			return round.WrapError(errors.New("de-commitment verify failed"), Pj)
 		}
 		if len(coordinates) != 2 {
-			return round.WrapError(errors.New("length of de-commitment should be 2"))
+			return round.WrapError(errors.New("length of de-commitment should be 2"), Pj)
 		}
 
 		Rj, err := crypto.NewECPoint(round.Params().EC(), coordinates[0], coordinates[1])
