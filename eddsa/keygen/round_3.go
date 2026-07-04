@@ -172,7 +172,15 @@ func (round *round3) Start() *tss.Error {
 			z := new(big.Int).SetInt64(int64(1))
 			for c := 1; c <= round.Threshold(); c++ {
 				z = modQ.Mul(z, kj)
-				BigXj, err = BigXj.Add(Vc[c].ScalarMult(z))
+				// z is kj^c mod q, nonzero for a well-formed party key; a peer whose
+				// KeyInt ≡ 0 (mod q) would drive Vc[c]^z to the point at infinity and
+				// panic. Use the checked variant so it aborts with a culprit instead.
+				vcz, mErr := Vc[c].ScalarMultChecked(z)
+				if mErr != nil {
+					culprits = append(culprits, Pj)
+					continue
+				}
+				BigXj, err = BigXj.Add(vcz)
 				if err != nil {
 					culprits = append(culprits, Pj)
 				}

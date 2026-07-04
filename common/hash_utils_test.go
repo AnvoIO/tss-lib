@@ -15,6 +15,24 @@ import (
 	"github.com/AnvoIO/tss-lib/v3/common"
 )
 
+// TestRejectionSample_DoesNotMutateInput is a defense-in-depth regression test:
+// RejectionSample must not reduce eHash in place, or a caller that reuses the
+// same *big.Int across calls (or afterwards) silently gets a corrupted value.
+func TestRejectionSample_DoesNotMutateInput(t *testing.T) {
+	q := big.NewInt(97)
+	eHash := new(big.Int).SetInt64(1000)
+	before := new(big.Int).Set(eHash)
+
+	got := common.RejectionSample(q, eHash)
+
+	if eHash.Cmp(before) != 0 {
+		t.Fatalf("RejectionSample mutated its input: got %v, was %v", eHash, before)
+	}
+	if got.Cmp(big.NewInt(1000%97)) != 0 {
+		t.Fatalf("RejectionSample returned %v, want %v", got, 1000%97)
+	}
+}
+
 func TestRejectionSample(t *testing.T) {
 	curveQ := common.GetRandomPrimeInt(rand.Reader, 256)
 	randomQ := common.MustGetRandomInt(rand.Reader, 64)

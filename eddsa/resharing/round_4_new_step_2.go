@@ -107,7 +107,11 @@ func (round *round4) Start() *tss.Error {
 
 	// 13-15.
 	if !Vc[0].Equals(round.save.EDDSAPub) {
-		return round.WrapError(errors.New("assertion failed: V_0 != y"), round.PartyID())
+		// The reshared aggregate key does not match the old public key, which means
+		// some old committee member decommitted an inconsistent VSS constant. The
+		// aggregate sum cannot pinpoint which one, so attribute the whole old
+		// committee rather than falsely blaming ourselves (was: round.PartyID()).
+		return round.WrapError(errors.New("assertion failed: V_0 != y (an old party committed an inconsistent VSS constant)"), round.OldParties().IDs()...)
 	}
 
 	// 16-20.
@@ -122,7 +126,15 @@ func (round *round4) Start() *tss.Error {
 		z := new(big.Int).SetInt64(int64(1))
 		for c := 1; c <= round.NewThreshold(); c++ {
 			z = modQ.Mul(z, kj)
-			newBigXj, err = newBigXj.Add(Vc[c].ScalarMult(z))
+			// z is kj^c mod q, nonzero for a well-formed party key; a peer whose
+			// KeyInt ≡ 0 (mod q) would drive Vc[c]^z to the point at infinity and
+			// panic. Use the checked variant so it aborts with a culprit instead.
+			vcz, mErr := Vc[c].ScalarMultChecked(z)
+			if mErr != nil {
+				culprits = append(culprits, Pj)
+				continue
+			}
+			newBigXj, err = newBigXj.Add(vcz)
 			if err != nil {
 				culprits = append(culprits, Pj)
 			}
@@ -130,7 +142,9 @@ func (round *round4) Start() *tss.Error {
 		newBigXjs[j] = newBigXj
 	}
 	if len(culprits) > 0 {
-		return round.WrapError(errors.Wrapf(err, "newBigXj.Add(Vc[c].ScalarMult(z))"), culprits...)
+		// Build a fresh (non-nil) cause: err may have been reset to nil by a later
+		// successful Add, which previously surfaced as an uninformative "Error is nil".
+		return round.WrapError(errors.New("newBigXj.Add(Vc[c].ScalarMult(z)) failed"), culprits...)
 	}
 
 	round.temp.newXi = newXi

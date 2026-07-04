@@ -116,7 +116,14 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 			return false
 		}
 	}
-	sigmaGi := crypto.ScalarBaseMult(ec, share.Share)
+	// share.Share is peer-supplied and only range-checked to [0, q), so Share == 0
+	// is possible; ScalarBaseMult(0) is the point at infinity and would panic. Use
+	// the checked variant and reject instead. (t above is share.ID^j mod q, which is
+	// nonzero for a valid party index coprime to the prime q, so vs[j]^t is safe.)
+	sigmaGi, err := crypto.ScalarBaseMultChecked(ec, share.Share)
+	if err != nil {
+		return false
+	}
 	return sigmaGi.Equals(v)
 }
 

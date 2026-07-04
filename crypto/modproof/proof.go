@@ -51,9 +51,10 @@ func NewProof(Session []byte, N, P, Q *big.Int, rand io.Reader) (*ProofMod, erro
 	}
 
 	// Fig 16.3
-	modN, modPhi := common.ModInt(N), common.ModInt(Phi)
-	// Phi is even so ModInverse falls back to non-CT math/big.
-	// This is a keygen-time operation, not the signing hot path.
+	modN := common.ModInt(N)
+	// Phi is even, so this inverse takes the blinded even-modulus path
+	// (common/int.go modInverseEvenBlinded) rather than constant-time bigmod,
+	// which requires an odd modulus. Keygen-time operation, not the signing hot path.
 	invN := common.ModInt(Phi).ModInverse(N)
 	if invN == nil {
 		return nil, fmt.Errorf("N is not invertible mod Phi")
@@ -67,7 +68,14 @@ func NewProof(Session []byte, N, P, Q *big.Int, rand io.Reader) (*ProofMod, erro
 	// for fourth-root
 	expo := new(big.Int).Add(Phi, big.NewInt(4))
 	expo = new(big.Int).Rsh(expo, 3)
-	expo = modPhi.Mul(expo, expo)
+	// Square without reducing mod the secret Phi. The reduction was a
+	// variable-time division by Phi and leaked its structure; it is unnecessary
+	// here because expo is only ever an exponent base-Yi mod N, and every Yi that
+	// reaches the fourth-root branch below is a unit mod N (it passed the QR test
+	// mod both P and Q), so Yi^Phi ≡ 1 and Yi^(expo mod Phi) ≡ Yi^expo (mod N).
+	// The unreduced exponent is ~twice as long (keygen-time cost only) and the
+	// resulting Xi — hence the proof transcript — is byte-for-byte identical.
+	expo = new(big.Int).Mul(expo, expo)
 
 	for i := range Y {
 		for j := 0; j < 4; j++ {
