@@ -66,13 +66,32 @@ func (p *ECPoint) Add(p1 *ECPoint) (*ECPoint, error) {
 	return NewECPoint(p.curve, x, y)
 }
 
+// ScalarMult multiplies the point by k. It panics if the result is the point at
+// infinity (which is not a representable ECPoint on a short-Weierstrass curve).
+// Retained for callers that have already established k cannot reduce to 0 mod the
+// group order; prefer ScalarMultChecked at sites that may receive a zero,
+// order-multiple, or otherwise attacker-influenced scalar.
 func (p *ECPoint) ScalarMult(k *big.Int) *ECPoint {
-	x, y := p.curve.ScalarMult(p.X(), p.Y(), k.Bytes())
-	newP, err := NewECPoint(p.curve, x, y) // it must be on the curve, no need to check.
+	newP, err := p.ScalarMultChecked(k)
 	if err != nil {
 		panic(fmt.Errorf("scalar mult to an ecpoint %s", err.Error()))
 	}
 	return newP
+}
+
+// ScalarMultChecked multiplies the point by k and returns an error, rather than
+// panicking, when the result is the point at infinity. curve.ScalarMult yields
+// the identity for k ≡ 0 mod N (a zero or order-multiple scalar); on a
+// short-Weierstrass curve such as secp256k1 the identity encodes as (0,0), which
+// is off-curve and so is rejected by NewECPoint. Callers that may pass such a
+// scalar should use this variant and handle the error instead of crashing.
+func (p *ECPoint) ScalarMultChecked(k *big.Int) (*ECPoint, error) {
+	x, y := p.curve.ScalarMult(p.X(), p.Y(), k.Bytes())
+	newP, err := NewECPoint(p.curve, x, y)
+	if err != nil {
+		return nil, fmt.Errorf("ScalarMultChecked: result is not a valid curve point (point at infinity?): %w", err)
+	}
+	return newP, nil
 }
 
 func (p *ECPoint) ToECDSAPubKey() *ecdsa.PublicKey {
@@ -111,13 +130,26 @@ func (p *ECPoint) EightInvEight() *ECPoint {
 	return p.ScalarMult(eight).ScalarMult(eightInv)
 }
 
+// ScalarBaseMult multiplies the curve base point by k. Like ScalarMult it panics
+// when the result is the point at infinity; prefer ScalarBaseMultChecked at sites
+// that may receive a zero, order-multiple, or attacker-influenced scalar.
 func ScalarBaseMult(curve elliptic.Curve, k *big.Int) *ECPoint {
-	x, y := curve.ScalarBaseMult(k.Bytes())
-	p, err := NewECPoint(curve, x, y) // it must be on the curve, no need to check.
+	p, err := ScalarBaseMultChecked(curve, k)
 	if err != nil {
 		panic(fmt.Errorf("scalar mult to an ecpoint %s", err.Error()))
 	}
 	return p
+}
+
+// ScalarBaseMultChecked multiplies the curve base point by k and returns an error,
+// rather than panicking, when the result is the point at infinity (k ≡ 0 mod N).
+func ScalarBaseMultChecked(curve elliptic.Curve, k *big.Int) (*ECPoint, error) {
+	x, y := curve.ScalarBaseMult(k.Bytes())
+	p, err := NewECPoint(curve, x, y)
+	if err != nil {
+		return nil, fmt.Errorf("ScalarBaseMultChecked: result is not a valid curve point (point at infinity?): %w", err)
+	}
+	return p, nil
 }
 
 func isOnCurve(c elliptic.Curve, x, y *big.Int) bool {

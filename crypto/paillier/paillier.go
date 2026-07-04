@@ -208,8 +208,9 @@ func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) (Proo
 	iters := ProofIters
 	xs := GenerateXs(iters, k, privateKey.N, ecdsaPub)
 	for i := 0; i < iters; i++ {
-		// PhiN is even so ModInverse falls back to non-CT math/big.
-		// This is a one-time keygen/proof operation with low exposure surface.
+		// PhiN is even, so this inverse takes the blinded even-modulus path
+		// (common/int.go modInverseEvenBlinded) rather than constant-time bigmod,
+		// which requires an odd modulus. One-time keygen/proof operation.
 		M := common.ModInt(privateKey.PhiN).ModInverse(privateKey.N)
 		if M == nil {
 			return pi, fmt.Errorf("N is not invertible mod PhiN")
