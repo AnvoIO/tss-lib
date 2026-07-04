@@ -1628,6 +1628,7 @@ bit-length floor bound modulus *size* and Blum-ness but not factor *balance* (`C
 | K10 | Low | `common.RejectionSample` mutates the caller's `eHash` in place | Reduced into the caller's `*big.Int` argument, an aliasing footgun for any caller reusing the hash | Not exploitable (current callers pass fresh values); robustness | Fixed (`aacad56`) |
 | K11 | Medium | Resharing round-2 SSID check reads slot 0 as an unvalidated anchor and mis-attributes the abort | New-committee round 2 uses old slot-0's ssid as reference (never validating slot 0) and, on a mismatch with an honest party, blames that honest party; a malicious slot-0 party forges an ssid to force an abort that frames the honest first-mismatching party. New parties cannot independently derive the old ssid to localize the liar | Reachable (malicious old slot-0 party); ECDSA-only; integrity/attribution — the session aborts either way, no key compromise | Fixed (`d3e659e`) |
 | K12 | Low | EdDSA signing round-3 de-commitment failures pass no culprit | The `DeCommit()`-failure and coordinate-length branches call `WrapError` with no culprit (unlike the sibling `NewECPoint`/proof branches and the keygen equivalent); the commitment/decommitment belong unambiguously to `Pj`, so a malicious signer aborts honest signers with an empty culprit list | Reachable (malicious signer); EdDSA-only; un-attributable griefing/DoS, no soundness impact | Fixed (`97ed67b`) |
+| K13 | High | Zero peer scalar in a proof `Verify` panics the verifier (point at infinity) | Several `Verify` paths multiply a peer-supplied scalar range-checked only to `[0, q)`; a value of `0` makes `ScalarBaseMult(0)`/`P^0` the point at infinity, which is off-curve on secp256k1 → `NewECPoint` fails → the panicking `ScalarMult`/`ScalarBaseMult` crash the honest verifier | Reachable (malicious peer sends `T`/`U`/`S1`/`Share` = 0); schnorr, mta, vss; remote DoS, no soundness impact | Fixed (`407ecb0`, `dd44755`) |
 
 ### C.4 Exploitation Summary (Pre-Fix Behavior)
 
@@ -1645,6 +1646,7 @@ bit-length floor bound modulus *size* and Blum-ness but not factor *balance* (`C
 | K10 | A caller that reuses the `eHash` it passed to `RejectionSample` | Silent corruption of the caller's value via aliasing; no current caller does this |
 | K11 | Malicious old-committee party at index 0 broadcasts a round-1 message with a forged `Ssid`; honest new parties adopt it as the reference and abort on the first honest old party, whose ID is the sole culprit | Honest node framed as the culprit while the slot-0 adversary escapes attribution; in deployments that eject/penalize on the culprit list, a single party can grind honest nodes out of the committee (integrity + griefing) |
 | K12 | Malicious signer broadcasts a round-2 decommitment that does not open its round-1 commitment | Honest signers abort with an empty culprit list; an honest coordinator cannot identify the griefer, so the malicious signer can repeatedly abort signing sessions with impunity (un-attributable DoS) |
+| K13 | Malicious peer sends a proof whose scalar (`T`/`U`/`S1`/`Share`) is `0` — canonical, yet driving the multiplication to the point at infinity | Honest verifier process panics (remote denial-of-service); a single participant can repeatedly crash verifiers |
 
 ### C.5 Fix Matrix
 
@@ -1662,6 +1664,7 @@ bit-length floor bound modulus *size* and Blum-ness but not factor *balance* (`C
 | K10 | **Fixed** | Reduce into a fresh `big.Int` (`new(big.Int).Mod(eHash, q)`) instead of the caller's value | `common/hash_utils.go:15-17` |
 | K11 | **Fixed** | Attribute the ssid mismatch to both parties in the disagreeing pair (the slot-0 anchor and `Pj`) rather than `Pj` alone | `ecdsa/resharing/round_2_new_step_1.go:44-64` |
 | K12 | **Fixed** | Pass `Pj` as the culprit on both the `DeCommit()`-failure and coordinate-length branches, matching the sibling branches | `eddsa/signing/round_3.go:48-57` |
+| K13 | **Fixed** | Migrate the reachable `Verify` sites (schnorr `T`/`U`, mta `S1`, vss `Share`) and the `BigXj` reconstruction loops to the non-panicking `ScalarMultChecked`/`ScalarBaseMultChecked`, which reject the identity instead of panicking | `crypto/schnorr/schnorr_proof.go`, `crypto/mta/proofs.go`, `crypto/vss/feldman_vss.go`, `{ecdsa,eddsa}/{keygen/round_3,resharing/round_4_new_step_2}.go` |
 
 ### C.6 Detailed Remediation Notes
 
@@ -1903,10 +1906,67 @@ slot-0 adversary and the `K12` test loses all culprits against the unfixed code.
 4. This cycle's scope was resharing continuity and the protocol-logic bug class; it did not re-audit
    the boundary-validation surface of the June 2026 cycle (Appendix B) or the cryptographic-soundness
    and memory-hygiene domains of the February 2026 cycle.
-5. Informational (out of this cycle's bug class, recorded for tracking): the audit noted that this
-   fork does not use the constant-time (`ExpCT`/`MulCT`) code paths for secret exponents in several
-   proving/decryption routines. That is a timing side-channel consideration, not a
-   single-malicious-participant verification bypass, and belongs to the cryptographic-soundness /
-   side-channel domain rather than the protocol-logic class audited here. It should be evaluated in a
-   dedicated side-channel review against the deployment's threat model (co-located attacker, remote
-   timing observability) before being actioned.
+5. Constant-time / timing side-channel: an investigation (see `C.9`) established that the audit's
+   original premise was inverted — `ExpCT`/`MulCT` were *upstream* symbols the fork **replaced** with
+   a `filippo.io/bigmod`-backed layer, so every secret-*exponent* modular exponentiation (including
+   Paillier `Decrypt`) is already constant-time. The two genuine variable-time-on-secret residues
+   (inverting `N` modulo the even secret totient `φ`, in `paillier.Proof` and `modproof.NewProof`)
+   are now blinded, and modproof's secret-modulus reduction removed (`C.9`). A strictly
+   constant-time even-modulus inverse (e.g. safegcd) is deliberately **not** implemented — the CT
+   backend omits it and a hand-rolled version is high-risk for a one-time keygen operation; the
+   blinding is the accepted tradeoff.
+
+### C.9 Follow-up Remediations
+
+A follow-up pass after the `K1`–`K12` batch addressed three residual items surfaced during the
+cycle. All are non-breaking and interoperable with honest `v3.0.0`/`v3.0.1` peers.
+
+#### C.9.1 `K13` — zero-scalar verifier DoS, and the `ScalarMult` panic class
+
+`crypto.ECPoint.ScalarMult` / `ScalarBaseMult` panic when the result is the point at infinity
+(`curve.ScalarMult` returns the identity for `k ≡ 0 mod N`, which on secp256k1 encodes as the
+off-curve `(0,0)` and so fails `NewECPoint`) — the residual of the February 2026 "no panics in call
+paths" class (`F3`). This was benign at most call sites (scalars are fresh random nonces or nonzero
+protocol-derived values), but **`K13`** is a genuinely reachable instance: several `Verify` paths
+multiply a *peer-supplied* scalar that is range-checked only to `[0, q)`, so a malicious `0`
+(canonical, but the identity's exponent) panics the honest verifier — a remote DoS.
+
+Remediation (two commits): added non-panicking `ScalarMultChecked() (*ECPoint, error)` and
+`ScalarBaseMultChecked()` (the panicking variants become thin wrappers), then migrated the
+attacker-reachable sites — schnorr `ZKProof`/`ZKVProof.Verify` (`T`, `U`), mta `ProofBobWC.Verify`
+(`S1`), vss `Share.Verify` (`Share`) — plus the `BigXj` reconstruction loops in keygen round 3 and
+resharing round 4 (ECDSA + EdDSA), where a peer with `KeyInt ≡ 0 (mod q)` would otherwise panic
+mid-reconstruction (now a clean, attributed abort). Provably-nonzero sites (random prover nonces,
+`θ⁻¹`/`sᵢ`/Lagrange coefficients, ckd's `[1,N)`-checked `IL`, and the raw stdlib `curve.ScalarMult`
+in signing round 7) retain `ScalarMult`, per the incremental Option-B migration. Regression tests
+assert schnorr `T=0`/`U=0` and vss `Share=0` are rejected without panicking.
+
+#### C.9.2 Constant-time hardening of the even-modulus inverse and modproof exponent
+
+Per residual note `C.8`.5: the constant-time layer already routes every secret-exponent
+exponentiation through `filippo.io/bigmod`. The two remaining variable-time-on-secret operations
+both invert `N` modulo the even secret totient `φ = (p-1)(q-1)` — which bigmod cannot handle (odd
+modulus only) and which fell back to `math/big`'s extended-GCD, whose running time leaks `φ`'s
+structure. Both (`crypto/paillier` square-free `Proof`, `crypto/modproof.NewProof`) now use a
+**blinded** inverse (`g⁻¹ = r·(g·r)⁻¹` for fresh random `r`), decorrelating the GCD timing from
+`φ`; correctness is verified before return with a plain-inverse fallback. Separately, modproof's
+fourth-root exponent `((φ+4)/8)²` no longer reduces modulo the secret `φ` — unnecessary, since every
+`Yᵢ` reaching that branch is a unit mod `N` (`Yᵢ^φ ≡ 1`), so the un-reduced exponent yields a
+byte-for-byte identical `Xᵢ` and proof transcript while removing the secret-modulus division. Both
+are one-time keygen/proof operations. Differential tests check the blinded inverse against `math/big`
+across exhaustive small, random, and safe-prime-shaped even moduli.
+
+#### C.9.3 ECDSA dual-committee resharing test coverage
+
+The `bnb-chain/tss-lib#128` fix has shipped in ECDSA resharing without a dedicated test; only the
+EdDSA port (`K3`) added one. The EdDSA regression test was ported to ECDSA (one `LocalParty` per
+unique key, a router that drops self-addressed messages, index-aligned committees, and — because the
+fixture keys are consecutive integers — an all-dual scenario with fresh members drawing pre-params
+beyond the old committee's fixture range so round-4 `h1`/`h2` uniqueness holds). Verified fail-open:
+neutralizing the round-3 self-store guard makes the dual member self-abort at round 4.
+
+#### C.9.4 Verification
+
+`go build ./... && go vet ./...` clean; the crypto (schnorr/vss/mta/paillier/modproof), keygen,
+resharing, and signing suites (ECDSA + EdDSA) pass, including the new `K13`, blinded-inverse, and
+ECDSA dual-committee tests. `common` also passes under `-race`.
