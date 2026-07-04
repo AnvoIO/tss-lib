@@ -113,6 +113,13 @@ func TestVerifyRejectsNonCanonicalShare(t *testing.T) {
 	// share + q is congruent mod q but non-canonical; must be rejected.
 	inflated := &Share{Threshold: threshold, ID: shares[0].ID, Share: new(big.Int).Add(shares[0].Share, q)}
 	assert.False(t, inflated.Verify(tss.EC(), threshold, vs), "non-canonical share (s+q) must be rejected")
+
+	// A zero share is in the canonical range [0, q) yet makes ScalarBaseMult the
+	// point at infinity; it must be rejected, not panic the verifier.
+	zeroShare := &Share{Threshold: threshold, ID: shares[0].ID, Share: big.NewInt(0)}
+	assert.NotPanics(t, func() {
+		assert.False(t, zeroShare.Verify(tss.EC(), threshold, vs), "zero share must be rejected")
+	})
 }
 
 func TestReconstruct(t *testing.T) {
