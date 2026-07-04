@@ -8,6 +8,7 @@
 package common
 
 import (
+	cryptorand "crypto/rand"
 	"fmt"
 	"math/big"
 	"sync"
@@ -138,9 +139,13 @@ func (mi *modInt) Exp(x, y *big.Int) *big.Int {
 func (mi *modInt) ModInverse(g *big.Int) *big.Int {
 	mod := mi.i()
 
-	// Even modulus: fall back to math/big.
+	// Even modulus: bigmod (constant-time) requires an odd modulus, so the
+	// constant-time Exp/Fermat path is unavailable. The even secret moduli that
+	// reach here are Paillier totients (φ = (p-1)(q-1)); inverting mod them with a
+	// raw math/big.ModInverse would leak φ's structure through the variable-time
+	// extended-GCD. Use a blinded inverse instead, which randomizes the GCD trace.
 	if mod.Bit(0) == 0 {
-		return new(big.Int).ModInverse(g, mod)
+		return modInverseEvenBlinded(g, mod)
 	}
 
 	// For odd moduli, use Fermat: g^(m-2) mod m (CT via Exp).
@@ -178,6 +183,59 @@ func (mi *modInt) ModInverseChecked(g *big.Int) (*big.Int, error) {
 func (mi *modInt) ModInverseWithTotient(g, totient *big.Int) *big.Int {
 	exp := new(big.Int).Sub(totient, one) // totient - 1
 	return mi.Exp(g, exp)
+}
+
+// modInverseEvenBlinded computes g^{-1} mod m for an EVEN modulus m using
+// multiplicative blinding, so the underlying variable-time extended-GCD runs on a
+// randomized value and its timing no longer correlates with the secret modulus.
+//
+// bigmod (the constant-time backend) only supports odd moduli, so an even secret
+// modulus — a Paillier totient φ = (p-1)(q-1) — cannot take the constant-time
+// path. Rather than call math/big.ModInverse(g, m) directly (whose Euclidean
+// quotient sequence, hence running time, depends on the secret m), we pick a
+// fresh random blinder r and use the exact identity
+//
+//	g^{-1} = r · (g·r mod m)^{-1}   (mod m),
+//
+// since (g·r)^{-1} = r^{-1}·g^{-1}. The inversion now operates on the blinded
+// value g·r, decorrelating the GCD trace from m. This is a timing-randomization
+// countermeasure, not a strictly constant-time algorithm; it is used only on
+// one-time keygen/proof operations, never a per-signature hot path.
+//
+// Correctness never depends on the blinding: the candidate is verified
+// (g·inv ≡ 1 mod m) before return, a blinding miss retries with a fresh r, and
+// the last resort is the plain inverse. Returns nil if g is not invertible mod m.
+func modInverseEvenBlinded(g, m *big.Int) *big.Int {
+	if m.Sign() <= 0 {
+		return nil
+	}
+	gg := new(big.Int).Mod(g, m) // reduce into [0, m)
+	for attempt := 0; attempt < 8; attempt++ {
+		r, err := cryptorand.Int(cryptorand.Reader, m)
+		if err != nil {
+			break
+		}
+		// Force r odd (hence coprime to the 2-part of an even m) and non-zero; the
+		// post-verification rejects the negligible odd-but-non-coprime case.
+		r.Or(r, one)
+		b := new(big.Int).Mul(gg, r)
+		b.Mod(b, m)
+		bInv := new(big.Int).ModInverse(b, m)
+		if bInv == nil {
+			continue
+		}
+		cand := new(big.Int).Mul(r, bInv)
+		cand.Mod(cand, m)
+		chk := new(big.Int).Mul(gg, cand)
+		chk.Mod(chk, m)
+		if chk.Cmp(one) == 0 {
+			return cand
+		}
+	}
+	// Guaranteed-correct fallback (variable-time). Reached only if g is genuinely
+	// non-invertible mod m, or after repeated blinding misses (astronomically
+	// unlikely for a safe-prime totient).
+	return new(big.Int).ModInverse(gg, m)
 }
 
 func (mi *modInt) i() *big.Int {

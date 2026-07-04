@@ -296,9 +296,19 @@ func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.Pub
 
 	// 4. runs only in the "with check" mode from Fig. 10
 	if X != nil {
+		// pf.S1 is peer-supplied; S1 ≡ 0 (mod q) drives ScalarBaseMult to the point
+		// at infinity, which would panic. Use the checked variants and reject
+		// instead. e is a hash challenge (≈never 0), checked for uniformity.
 		s1ModQ := new(big.Int).Mod(pf.S1, ec.Params().N)
-		gS1 := crypto.ScalarBaseMult(ec, s1ModQ)
-		xEU, err := X.ScalarMult(e).Add(pf.U)
+		gS1, err := crypto.ScalarBaseMultChecked(ec, s1ModQ)
+		if err != nil {
+			return false
+		}
+		xE, err := X.ScalarMultChecked(e)
+		if err != nil {
+			return false
+		}
+		xEU, err := xE.Add(pf.U)
 		if err != nil || !gS1.Equals(xEU) {
 			return false
 		}

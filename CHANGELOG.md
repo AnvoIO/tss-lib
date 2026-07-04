@@ -3,6 +3,127 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v3.0.2] - 2026-07-03
+
+July 2026 security update. A non-breaking patch: no wire-format changes and no
+breaking API changes (the only API addition is the `ScalarMultChecked` /
+`ScalarBaseMultChecked` helpers), interoperable with honest v3.0.0/v3.0.1 peers.
+It closes a resharing-continuity
+authentication bug and a resharing modulus-size gap, ports an upstream
+dual-committee correctness fix to EdDSA, corrects abort attribution in several
+paths, and adds a batch of defense-in-depth guards — all identified by a
+multi-agent audit of resharing continuity and protocol-logic invariants. A
+follow-up pass closed a reachable zero-scalar verifier DoS, added non-panicking
+scalar-multiplication variants, hardened two one-time secret-modulus inversions
+against timing leaks, and extended test coverage. See
+[Appendix C](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update)
+of the audit report for full detail.
+
+### Fixed (security)
+
+- **`SRC-2026-1155` (resharing continuity bypass):** the new committee's round-1
+  handler looped over every old-committee `DGRound1Message` but always unmarshalled
+  slot `0` instead of the loop's current message, so the "every old party must
+  advertise the same aggregate public key" check degenerated to comparing slot 0
+  against itself and never fired. A malicious old slot-0 party could advertise a
+  forged aggregate key (and a matching VSS constant) and make honest new parties
+  complete resharing for an attacker-chosen key. The handler now reads the current
+  message so each old party's advertised key is checked; a mismatch aborts round 1.
+  Present on both ECDSA and EdDSA. (`{ecdsa,eddsa}/resharing/round_1_old_step_1.go`)
+- **Paillier/NTilde modulus size floor in ECDSA resharing:** the new committee's
+  round-4 validation checked the mod/DLN proofs but — unlike keygen — never enforced
+  the 2048-bit floor on peer-supplied Paillier `N` and `NTilde`. Neither proof bounds
+  modulus size, so a malicious new-committee member could seat a small modulus as the
+  reshared group's long-term auxiliary material; that `NTilde` is later the Pedersen
+  parameter for the signing MtA range proofs, so a weak factorization breaks their
+  statistical hiding. The round-4 loop now applies the same `BitLen() == 2048` checks
+  as keygen. ECDSA-only (EdDSA resharing uses no Paillier material).
+  (`ecdsa/resharing/round_4_new_step_2.go`)
+- **Zero-scalar verifier DoS (`K13`):** several proof `Verify` paths multiplied a
+  peer-supplied scalar that was range-checked only to `[0, q)` — so a value of `0`
+  was accepted and `ScalarBaseMult(0)`/`P^0` (the point at infinity) panicked the
+  honest verifier via the panicking `ScalarMult`/`ScalarBaseMult`. A single malicious
+  peer could crash a verifier. The affected paths (schnorr `ZKProof`/`ZKVProof.Verify`
+  on `T`/`U`, mta `ProofBobWC.Verify` on `S1`, vss `Share.Verify` on `Share`) now use
+  the checked variants and reject instead. The keygen/resharing `BigXj` reconstruction
+  loops were migrated too, so a peer with `KeyInt ≡ 0 (mod q)` yields a clean attributed
+  abort rather than a panic.
+
+### Fixed (correctness)
+
+- **EdDSA dual-committee resharing (upstream `bnb-chain/tss-lib#128`):** ported the
+  two guards ECDSA already carried for a party sitting in both the old and new
+  committees. Round 1/round 3 no longer call `allOldOK()` unconditionally (gated
+  behind `!IsNewCommittee()`), and a dual party's self-dealt round-3 share is now
+  stored locally instead of emitted on the wire and clobbered. Without this a reshare
+  including a dual-committee member aborts. (`eddsa/resharing/round_{1,3}_*.go`)
+- **Resharing round-4/5 abort attribution:** the round-4 `Vc[0]!=pub` assertion
+  attributed the abort to the honest reporting party itself; round-4 `newBigXj`
+  reconstruction and round-5 `facProof` verification returned `WrapError` over a
+  `nil` cause, surfacing real failures as the uninformative "Error is nil". Now
+  attribute the old committee and return descriptive non-nil errors. (ECDSA + EdDSA)
+- **Resharing round-2 SSID attribution:** the new committee's round-2 SSID check
+  read old-committee slot 0 as an unvalidated anchor and blamed the *other* party on
+  a mismatch, so a malicious old slot-0 party could forge an ssid and force an abort
+  that frames the honest first-mismatching party (usable to grind honest nodes off
+  the committee where the culprit list drives penalties). Now attribute both parties
+  in the disagreeing pair. ECDSA-only. (`ecdsa/resharing/round_2_new_step_1.go`)
+- **Signing abort attribution:** the ECDSA phase-5 `U != T` consistency failure
+  (round 9) attributed the abort to the honest party running the check — now the
+  other signers; and the EdDSA round-3 de-commitment failure branches passed *no*
+  culprit (unlike their sibling branches), leaving a griefer un-attributable — now
+  the sender. (`ecdsa/signing/round_9.go`, `eddsa/signing/round_3.go`)
+
+### Hardened (defense-in-depth, non-exploitable)
+
+- `crypto/schnorr` `ZKProof.ValidateBasic` now also requires `Alpha.ValidateBasic()`
+  (on-curve), matching `ZKVProof`, so `Verify` cannot dereference off-curve coordinates.
+- `crypto/dlnproof` `Verify` nil-checks each `Alpha[i]`/`T[i]` before the modular
+  reduction instead of after, returning `false` rather than panicking on a nil element.
+- `tss.ParseWireMessage` rejects a nil `from` party with an error instead of panicking
+  on the exported boundary.
+- `common.RejectionSample` reduces into a fresh `big.Int` instead of mutating the
+  caller's `eHash` in place, removing an aliasing footgun.
+- Removed a dead `kgRound2Message1s[i] = r2msg1` self-write in EdDSA keygen round 2
+  (inert, but the same wrong-index class the audit was hunting; the ECDSA sibling
+  lacks it).
+- Added non-panicking `crypto.ECPoint.ScalarMultChecked` / `ScalarBaseMultChecked`
+  that return an error instead of panicking when the result is the point at infinity;
+  the panicking variants are retained as thin wrappers for call sites that have
+  established the scalar is nonzero (`crypto/ecpoint.go`).
+- **Constant-time (timing side-channel):** the constant-time layer already routes every
+  secret-*exponent* modular exponentiation (incl. Paillier `Decrypt`) through
+  `filippo.io/bigmod`. The two remaining variable-time-on-secret operations — inverting
+  `N` modulo the even secret totient `φ` in `paillier.Proof` and `modproof.NewProof` —
+  are now **blinded** (`g⁻¹ = r·(g·r)⁻¹`, decorrelating the extended-GCD timing from `φ`),
+  and modproof's fourth-root exponent no longer reduces modulo the secret `φ` (the
+  reduction was unnecessary — every `Yᵢ` there is a unit, so the transcript is identical).
+  Both are one-time keygen/proof operations. (`common/int.go`, `crypto/paillier`,
+  `crypto/modproof`)
+
+### Known limitations
+
+- **Modulus balance / unbalanced `N`:** the mod-proof proves Blum-ness and no small
+  factors, not factor *balance*; a 2048-bit `N = p·q` with one smallish factor can
+  pass both the mod-proof and the new bit-length floor. A real fix requires a
+  CGGMP/GG20-style range/balance proof (new ZK crypto, diverging from upstream), for a
+  narrow threat. Documented as a known limitation; not implemented absent a specific
+  threat. Applies to keygen as well as resharing.
+
+### Verification
+
+- New regression/adversarial tests: resharing slot-0 continuity (ECDSA + EdDSA),
+  small-Paillier-`N` and small-`NTilde` rejection, EdDSA dual-committee self-share
+  continuity, round-2 SSID slot-0 misattribution, EdDSA signing de-commitment
+  culprit attribution, and unit tests for each defense-in-depth guard.
+- Follow-up tests: ECDSA dual-committee self-share continuity (porting the EdDSA
+  case), `ScalarMultChecked`/`ScalarBaseMultChecked` point-at-infinity rejection,
+  schnorr `T=0`/`U=0` and vss `Share=0` verifier rejection (no panic), and a
+  differential check of the blinded even-modulus inverse against `math/big`.
+- `go build ./...` and `go vet ./...` clean; the touched protocol and crypto suites
+  pass. Every non-trivial fix was verified fail-open (neutralize the guard → the test
+  goes red).
+
 ## [v3.0.1] - 2026-06-19
 
 June 2026 security update. A non-breaking security patch: no API or wire-format
@@ -57,5 +178,6 @@ arithmetic, session-bound Fiat-Shamir challenges, VSS correctness, secure-by-def
 proof gating). See the [v3.0 breaking changes](./README.md#v30-security-hardening-and-session-context)
 and the [February 2026 audit report](./security/2026-02-24-tss-lib-full-audit.md).
 
+[v3.0.2]: https://github.com/AnvoIO/tss-lib/compare/v3.0.1...v3.0.2
 [v3.0.1]: https://github.com/AnvoIO/tss-lib/compare/v3.0.0...v3.0.1
 [v3.0.0]: https://github.com/AnvoIO/tss-lib/releases/tag/v3.0.0

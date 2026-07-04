@@ -26,3 +26,6 @@ vendor
 .codex/
 .gemini/
 
+# Transient session handoff docs (not part of the repo)
+_handoff/
+

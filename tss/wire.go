@@ -14,6 +14,9 @@ import (
 
 // Used externally to update a LocalParty with a valid ParsedMessage
 func ParseWireMessage(wireBytes []byte, from *PartyID, isBroadcast bool) (ParsedMessage, error) {
+	if from == nil {
+		return nil, errors.New("ParseWireMessage: from party must not be nil")
+	}
 	wire := new(MessageWrapper)
 	wire.Message = new(anypb.Any)
 	wire.From = from.MessageWrapper_PartyID

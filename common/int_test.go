@@ -69,6 +69,81 @@ func TestExpCTMatchesBigInt(t *testing.T) {
 	}
 }
 
+// TestModInverseEvenModulusBlinded verifies that the blinded even-modulus inverse
+// path returns exactly the same result as math/big.ModInverse across a range of
+// even moduli — small values, random even moduli, and safe-prime-shaped totients
+// φ = (p-1)(q-1) — and that non-invertible inputs return nil. Correctness must not
+// depend on the internal blinding randomness.
+func TestModInverseEvenModulusBlinded(t *testing.T) {
+	t.Run("small even moduli, exhaustive", func(t *testing.T) {
+		for _, m := range []int64{2, 4, 6, 8, 10, 12, 100, 1000} {
+			mod := big.NewInt(m)
+			mi := ModInt(mod)
+			for g := int64(0); g < m; g++ {
+				gg := big.NewInt(g)
+				got := mi.ModInverse(gg)
+				want := new(big.Int).ModInverse(gg, mod)
+				if want == nil {
+					assert.Nil(t, got, "g=%d mod %d should be non-invertible", g, m)
+					continue
+				}
+				require.NotNil(t, got, "g=%d mod %d should be invertible", g, m)
+				assert.Equal(t, 0, want.Cmp(got), "inverse of %d mod %d mismatch", g, m)
+				// Sanity: g*inv ≡ 1 (mod m).
+				chk := new(big.Int).Mul(gg, got)
+				chk.Mod(chk, mod)
+				assert.Equal(t, 0, chk.Cmp(big.NewInt(1)), "g*inv != 1 for g=%d mod %d", g, m)
+			}
+		}
+	})
+
+	t.Run("random even moduli", func(t *testing.T) {
+		for i := 0; i < 50; i++ {
+			mod, err := rand.Int(rand.Reader, new(big.Int).Lsh(big.NewInt(1), 512))
+			require.NoError(t, err)
+			mod.SetBit(mod, 0, 0) // force even
+			if mod.Sign() == 0 {
+				continue
+			}
+			g, err := rand.Int(rand.Reader, mod)
+			require.NoError(t, err)
+			got := ModInt(mod).ModInverse(g)
+			want := new(big.Int).ModInverse(g, mod)
+			if want == nil {
+				assert.Nil(t, got)
+				continue
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, 0, want.Cmp(got), "random even-modulus inverse mismatch")
+		}
+	})
+
+	t.Run("safe-prime totient shape phi=(p-1)(q-1)", func(t *testing.T) {
+		// Small safe primes p=2p'+1: 7 (p'=3), 11 (p'=5), 23 (p'=11), 47 (p'=23).
+		safePrimes := []int64{7, 11, 23, 47, 59, 83}
+		for _, p := range safePrimes {
+			for _, q := range safePrimes {
+				if p == q {
+					continue
+				}
+				N := big.NewInt(p * q)
+				phi := big.NewInt((p - 1) * (q - 1)) // even
+				got := ModInt(phi).ModInverse(N)
+				want := new(big.Int).ModInverse(N, phi)
+				// These contrived small primes can share a factor (e.g. p|q-1), so
+				// N is not always invertible; the blinded path must agree with
+				// math/big either way (both nil, or the same inverse).
+				if want == nil {
+					assert.Nil(t, got, "p=%d q=%d: expected non-invertible", p, q)
+					continue
+				}
+				require.NotNil(t, got)
+				assert.Equal(t, 0, want.Cmp(got), "N^{-1} mod phi mismatch for p=%d q=%d", p, q)
+			}
+		}
+	})
+}
+
 func TestExpEdgeCases(t *testing.T) {
 	mod := big.NewInt(17) // prime
 	mi := ModInt(mod)

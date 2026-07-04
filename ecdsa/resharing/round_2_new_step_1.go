@@ -21,6 +21,10 @@ import (
 
 var zero = big.NewInt(0)
 
+// paillierBitsLen mirrors ecdsa/keygen's modulus-size floor; the new committee
+// enforces it on peer-supplied Paillier/NTilde material in round 4.
+const paillierBitsLen = 2048
+
 func (round *round2) Start() *tss.Error {
 	if round.started {
 		return round.WrapError(errors.New("round already started"))
@@ -37,7 +41,15 @@ func (round *round2) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
-	// check consistency of SSID
+	// check consistency of SSID across the old committee. Slot 0 is only the
+	// reference value, not a privileged/validated anchor: on a mismatch the liar
+	// could be the slot-0 party (whose value is never itself checked) just as
+	// easily as Pj, and a new party cannot independently derive the old
+	// committee's ssid to break the tie. Attribute both parties in the
+	// disagreeing pair rather than blaming Pj alone, which let a malicious old
+	// slot-0 party force an abort that frames the honest slot-1 party (the same
+	// fixed-slot anti-pattern as SRC-2026-1155 in round 1, in the ssid check).
+	anchor := round.OldParties().IDs()[0]
 	r1msg := round.temp.dgRound1Messages[0].Content().(*DGRound1Message)
 	SSID := r1msg.UnmarshalSSID()
 	for j, Pj := range round.OldParties().IDs() {
@@ -47,7 +59,7 @@ func (round *round2) Start() *tss.Error {
 		r1msg := round.temp.dgRound1Messages[j].Content().(*DGRound1Message)
 		SSIDj := r1msg.UnmarshalSSID()
 		if subtle.ConstantTimeCompare(SSID, SSIDj) != 1 {
-			return round.WrapError(errors.New("ssid mismatch"), Pj)
+			return round.WrapError(errors.New("ssid mismatch"), anchor, Pj)
 		}
 	}
 	round.temp.ssid = SSID

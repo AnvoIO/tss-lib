@@ -71,8 +71,18 @@ func (pf *ZKProof) Verify(Session []byte, X *crypto.ECPoint) bool {
 		cHash := common.SHA512_256i_TAGGED(Session, X.X(), X.Y(), g.X(), g.Y(), pf.Alpha.X(), pf.Alpha.Y())
 		c = common.RejectionSample(q, cHash)
 	}
-	tG := crypto.ScalarBaseMult(ec, pf.T)
-	Xc := X.ScalarMult(c)
+	// pf.T is peer-supplied and only range-checked to [0, q), so T == 0 is
+	// possible; ScalarBaseMult(0) is the point at infinity and would panic. Use
+	// the checked variant and reject instead. c is a hash challenge (≈never 0),
+	// checked too for uniformity.
+	tG, err := crypto.ScalarBaseMultChecked(ec, pf.T)
+	if err != nil {
+		return false
+	}
+	Xc, err := X.ScalarMultChecked(c)
+	if err != nil {
+		return false
+	}
 	aXc, err := pf.Alpha.Add(Xc)
 	if err != nil {
 		return false
@@ -81,7 +91,7 @@ func (pf *ZKProof) Verify(Session []byte, X *crypto.ECPoint) bool {
 }
 
 func (pf *ZKProof) ValidateBasic() bool {
-	return pf.T != nil && pf.Alpha != nil
+	return pf.T != nil && pf.Alpha != nil && pf.Alpha.ValidateBasic()
 }
 
 // NewZKProof constructs a new Schnorr ZK proof of knowledge s_i, l_i such that V_i = R^s_i, g^l_i (GG18Spec Fig. 17)
@@ -129,11 +139,25 @@ func (pf *ZKVProof) Verify(Session []byte, V, R *crypto.ECPoint) bool {
 		cHash := common.SHA512_256i_TAGGED(Session, V.X(), V.Y(), R.X(), R.Y(), g.X(), g.Y(), pf.Alpha.X(), pf.Alpha.Y())
 		c = common.RejectionSample(q, cHash)
 	}
-	tR := R.ScalarMult(pf.T)
-	uG := crypto.ScalarBaseMult(ec, pf.U)
-	tRuG, _ := tR.Add(uG) // already on the curve.
-
-	Vc := V.ScalarMult(c)
+	// pf.T, pf.U are peer-supplied and only range-checked to [0, q), so a value of
+	// 0 is possible; R^0 and G^0 are the point at infinity and would panic. Use the
+	// checked variants and reject instead. c is a hash challenge, checked too.
+	tR, err := R.ScalarMultChecked(pf.T)
+	if err != nil {
+		return false
+	}
+	uG, err := crypto.ScalarBaseMultChecked(ec, pf.U)
+	if err != nil {
+		return false
+	}
+	tRuG, err := tR.Add(uG)
+	if err != nil {
+		return false
+	}
+	Vc, err := V.ScalarMultChecked(c)
+	if err != nil {
+		return false
+	}
 	aVc, err := pf.Alpha.Add(Vc)
 	if err != nil {
 		return false
