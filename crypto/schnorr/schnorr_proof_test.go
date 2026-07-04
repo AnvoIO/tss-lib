@@ -86,6 +86,37 @@ func TestSchnorrProofVerifyRejectsNonCanonicalT(t *testing.T) {
 	assert.False(t, proof.Verify(Session, nil), "nil X must be rejected")
 }
 
+// TestSchnorrProofVerifyRejectsZeroScalar checks that a peer-supplied zero proof
+// scalar (which is in the canonical range [0, q) yet drives ScalarBaseMult/ScalarMult
+// to the point at infinity) is rejected rather than panicking an honest verifier.
+func TestSchnorrProofVerifyRejectsZeroScalar(t *testing.T) {
+	q := tss.EC().Params().N
+	u := common.GetRandomPositiveInt(rand.Reader, q)
+	X := crypto.ScalarBaseMult(tss.EC(), u)
+
+	// ZKProof with T = 0.
+	proof, _ := NewZKProof(Session, u, X, rand.Reader)
+	proof.T = big.NewInt(0)
+	assert.NotPanics(t, func() {
+		assert.False(t, proof.Verify(Session, X), "T=0 must be rejected, not panic")
+	})
+
+	// ZKVProof with T = 0 and with U = 0.
+	R := crypto.ScalarBaseMult(tss.EC(), common.GetRandomPositiveInt(rand.Reader, q))
+	s, l := common.GetRandomPositiveInt(rand.Reader, q), common.GetRandomPositiveInt(rand.Reader, q)
+	V, _ := R.ScalarMult(s).Add(crypto.ScalarBaseMult(tss.EC(), l))
+	vproof, _ := NewZKVProof(Session, V, R, s, l, rand.Reader)
+	origT := vproof.T
+	vproof.T = big.NewInt(0)
+	assert.NotPanics(t, func() {
+		assert.False(t, vproof.Verify(Session, V, R), "T=0 must be rejected, not panic")
+	})
+	vproof.T, vproof.U = origT, big.NewInt(0)
+	assert.NotPanics(t, func() {
+		assert.False(t, vproof.Verify(Session, V, R), "U=0 must be rejected, not panic")
+	})
+}
+
 func TestSchnorrProofVerifyBadX(t *testing.T) {
 	q := tss.EC().Params().N
 	u := common.GetRandomPositiveInt(rand.Reader, q)
