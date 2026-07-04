@@ -5,12 +5,17 @@ All notable changes to this project are documented here. This project adheres to
 
 ## [v3.0.2] - 2026-07-03
 
-July 2026 security update. A non-breaking patch: no API or wire-format changes,
-interoperable with honest v3.0.0/v3.0.1 peers. It closes a resharing-continuity
+July 2026 security update. A non-breaking patch: no wire-format changes and no
+breaking API changes (the only API addition is the `ScalarMultChecked` /
+`ScalarBaseMultChecked` helpers), interoperable with honest v3.0.0/v3.0.1 peers.
+It closes a resharing-continuity
 authentication bug and a resharing modulus-size gap, ports an upstream
 dual-committee correctness fix to EdDSA, corrects abort attribution in several
 paths, and adds a batch of defense-in-depth guards — all identified by a
-multi-agent audit of resharing continuity and protocol-logic invariants. See
+multi-agent audit of resharing continuity and protocol-logic invariants. A
+follow-up pass closed a reachable zero-scalar verifier DoS, added non-panicking
+scalar-multiplication variants, hardened two one-time secret-modulus inversions
+against timing leaks, and extended test coverage. See
 [Appendix C](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update)
 of the audit report for full detail.
 
@@ -34,6 +39,15 @@ of the audit report for full detail.
   statistical hiding. The round-4 loop now applies the same `BitLen() == 2048` checks
   as keygen. ECDSA-only (EdDSA resharing uses no Paillier material).
   (`ecdsa/resharing/round_4_new_step_2.go`)
+- **Zero-scalar verifier DoS (`K13`):** several proof `Verify` paths multiplied a
+  peer-supplied scalar that was range-checked only to `[0, q)` — so a value of `0`
+  was accepted and `ScalarBaseMult(0)`/`P^0` (the point at infinity) panicked the
+  honest verifier via the panicking `ScalarMult`/`ScalarBaseMult`. A single malicious
+  peer could crash a verifier. The affected paths (schnorr `ZKProof`/`ZKVProof.Verify`
+  on `T`/`U`, mta `ProofBobWC.Verify` on `S1`, vss `Share.Verify` on `Share`) now use
+  the checked variants and reject instead. The keygen/resharing `BigXj` reconstruction
+  loops were migrated too, so a peer with `KeyInt ≡ 0 (mod q)` yields a clean attributed
+  abort rather than a panic.
 
 ### Fixed (correctness)
 
@@ -73,6 +87,19 @@ of the audit report for full detail.
 - Removed a dead `kgRound2Message1s[i] = r2msg1` self-write in EdDSA keygen round 2
   (inert, but the same wrong-index class the audit was hunting; the ECDSA sibling
   lacks it).
+- Added non-panicking `crypto.ECPoint.ScalarMultChecked` / `ScalarBaseMultChecked`
+  that return an error instead of panicking when the result is the point at infinity;
+  the panicking variants are retained as thin wrappers for call sites that have
+  established the scalar is nonzero (`crypto/ecpoint.go`).
+- **Constant-time (timing side-channel):** the constant-time layer already routes every
+  secret-*exponent* modular exponentiation (incl. Paillier `Decrypt`) through
+  `filippo.io/bigmod`. The two remaining variable-time-on-secret operations — inverting
+  `N` modulo the even secret totient `φ` in `paillier.Proof` and `modproof.NewProof` —
+  are now **blinded** (`g⁻¹ = r·(g·r)⁻¹`, decorrelating the extended-GCD timing from `φ`),
+  and modproof's fourth-root exponent no longer reduces modulo the secret `φ` (the
+  reduction was unnecessary — every `Yᵢ` there is a unit, so the transcript is identical).
+  Both are one-time keygen/proof operations. (`common/int.go`, `crypto/paillier`,
+  `crypto/modproof`)
 
 ### Known limitations
 
@@ -89,6 +116,10 @@ of the audit report for full detail.
   small-Paillier-`N` and small-`NTilde` rejection, EdDSA dual-committee self-share
   continuity, round-2 SSID slot-0 misattribution, EdDSA signing de-commitment
   culprit attribution, and unit tests for each defense-in-depth guard.
+- Follow-up tests: ECDSA dual-committee self-share continuity (porting the EdDSA
+  case), `ScalarMultChecked`/`ScalarBaseMultChecked` point-at-infinity rejection,
+  schnorr `T=0`/`U=0` and vss `Share=0` verifier rejection (no panic), and a
+  differential check of the blinded even-modulus inverse against `math/big`.
 - `go build ./...` and `go vet ./...` clean; the touched protocol and crypto suites
   pass. Every non-trivial fix was verified fail-open (neutralize the guard → the test
   goes red).

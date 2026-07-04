@@ -122,13 +122,16 @@ The transport layer is your responsibility. You must provide:
 
 ### v3.0.2: July 2026 resharing-continuity and protocol-logic update (non-breaking)
 
-Security patch. No API or wire-format changes — interoperable with honest
-v3.0.0/v3.0.1 peers. Closes a resharing-continuity authentication bypass
-(`SRC-2026-1155`) and a resharing Paillier/`NTilde` modulus-size gap, ports the
-upstream dual-committee resharing fix (`bnb-chain/tss-lib#128`) to EdDSA, corrects
-abort attribution in several resharing/signing paths, and adds a batch of
-defense-in-depth guards. Found by a multi-agent audit of resharing continuity and
-protocol-logic invariants. See the [`CHANGELOG`](./CHANGELOG.md) and
+Security patch. No breaking API or wire-format changes — interoperable with honest
+v3.0.0/v3.0.1 peers (the only API change is the additive `ScalarMultChecked` /
+`ScalarBaseMultChecked` helpers). Closes a resharing-continuity authentication
+bypass (`SRC-2026-1155`) and a resharing Paillier/`NTilde` modulus-size gap, ports
+the upstream dual-committee resharing fix (`bnb-chain/tss-lib#128`) to EdDSA,
+corrects abort attribution in several resharing/signing paths, and adds a batch of
+defense-in-depth guards. A follow-up pass closed a reachable zero-scalar verifier
+DoS (`K13`), hardened two one-time secret-modulus inversions against timing leaks,
+and added ECDSA dual-committee test coverage. Found by a multi-agent audit of
+resharing continuity and protocol-logic invariants. See the [`CHANGELOG`](./CHANGELOG.md) and
 [Appendix C of the audit report](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update).
 
 ### v3.0.1: June 2026 boundary-validation security update (non-breaking)
