@@ -15,8 +15,9 @@ Planned v3.1.0 security and maintenance hardening. Existing valid v3 integration
 - Added a 4 MiB wire-message ceiling and per-element proof decoding bounds before `big.Int` allocation.
 - Made session nonce values immutable across the API boundary and added explicit positive-value validation for callers preparing for v4.
 - Added byte-preserving EdDSA signing via `NewLocalPartyWithBytes` and made invalid legacy lengths return errors rather than panic.
-- Zero temporary secret material after protocol aborts as well as successful completion; resharing copies persisted output before cleanup.
-- Serialized message validation with round advancement and kept error-triggered secret wiping under the party mutex, closing concurrency races without allowing rejected messages to destroy a live session.
+- Zero temporary secret material after protocol aborts as well as successful completion; a fatal error now terminalizes the party under its mutex before cleanup, so queued updates cannot resume on wiped state. Resharing copies persisted output before success cleanup.
+- Serialized message validation with round advancement, made wire-parse error formatting independent of mutable round state, and made party status/error helpers concurrency-safe.
+- Kept validation failures non-terminal so malformed or non-member messages cannot wipe an otherwise live session; valid transport messages racing `Start` or successful completion retain v3 delivery behavior.
 - Added nil-safe MtA proof and VSS share verification guards.
 
 ### Maintenance and governance
@@ -25,6 +26,7 @@ Planned v3.1.0 security and maintenance hardening. Existing valid v3 integration
 - Updated direct cryptographic/runtime dependencies and pinned `govulncheck` as a Go tool dependency.
 - Removed unverified `curl | tar` Go installation from ARM CI; official setup actions are pinned to release commit SHAs with read-only permissions.
 - Added CI vet/vulnerability gates, Dependabot configuration, a private-reporting policy, PR security checklist, and an explicit solo-maintainer tool-review process.
+- Added deterministic queued-update terminalization coverage and repeated malformed-wire/live-round stress tests under the race detector.
 
 ### Compatibility
 

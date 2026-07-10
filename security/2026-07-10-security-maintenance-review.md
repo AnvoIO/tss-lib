@@ -19,9 +19,11 @@ The review included the existing audit report, recent security regression tests,
 | R5 | Top-level wire messages and proof integer fields had no explicit decoding ceiling. | Memory/CPU exhaustion by malformed authenticated input or direct API use. | Added 4 MiB wire cap and per-proof element bounds. |
 | R6 | EdDSA's numeric message API could lose leading zero bytes; an invalid optional length could panic. | Signing a different byte string than intended or local crash. | Added `NewLocalPartyWithBytes`; legacy conversion now returns a `Start` error. |
 | R7 | Session nonces were optional, with zero or message-derived fallbacks. | Cross-session transcript/proof replay when runs are repeated or overlap. | Staged: v3.1 hardens the nonce API and deprecates fallback behavior; the follow-on v4 branch rejects missing or non-positive nonces before prepare/secret work. |
-| R8 | Temporary secrets were cleared on successful completion but not on every abort. | Longer secret lifetime in memory after errors. | Base lifecycle invokes package cleanup on `Start`/`Update` errors; resharing copies output before success cleanup. |
+| R8 | Temporary secrets were cleared on successful completion but not on every abort. | Longer secret lifetime in memory after errors. | Fatal `Start`/`Update` errors terminalize the party and invoke cleanup under the party mutex; resharing copies output before success cleanup. |
 | R9 | Several exported proof/share verification paths lacked complete nil guards. | Direct-API panic. | Fixed and covered by package tests. |
 | R10 | Random-byte acquisition accepted successful short reads. | Partially uninitialized/deterministic output with a nonstandard reader. | Switched to `io.ReadFull`. |
+| R11 | Validation and wire-parse errors could format themselves by reading mutable round state without the party mutex. | Data race in error-only scheduling metadata; possible undefined behavior under concurrent delivery. | Validation is serialized with round advancement; `WrapError` uses a separately synchronized immutable round-context snapshot, so pre-parse errors never dereference live round state. |
+| R12 | An error could wipe temporary state and then allow an already-queued update to continue on that wiped party. | Session corruption, secondary failures, and inconsistent abort behavior. | Added explicit created/running/finished/aborted lifecycle states; fatal errors terminalize before cleanup and queued updates return the same terminal error. |
 | M1 | Go 1.23 was unsupported; CI downloaded ARM Go with unchecked `curl | tar`; workflows targeted `main` while the repository uses `master`. | Missing security patches and ineffective/supply-chain-weak CI. | Go 1.25 minimum, 1.25/1.26 matrix, official pinned setup actions, correct branch. |
 | M2 | Dependencies and protobuf/crypto modules were stale; no automated reachable-vulnerability gate existed. | Delayed security updates. | Direct dependencies updated, `govulncheck` pinned as a Go tool, CI and Dependabot added. |
 | G1 | Security reporting, merge controls, and solo-maintainer review expectations were undocumented. | Inconsistent disclosure and review; tool review could be mistaken for human approval. | Added `SECURITY.md`, `GOVERNANCE.md`, and a PR security/review template. |
@@ -37,6 +39,8 @@ go test ./ecdsa/keygen ./ecdsa/resharing ./ecdsa/signing \
 go vet ./...
 GOTOOLCHAIN=go1.25.11 go tool govulncheck ./...
 make test_signing_race
+make test_unit_race
+make test_lifecycle_race
 go test ./crypto/commitments -run=^$ -fuzz=FuzzParseSecrets -fuzztime=2s
 go test ./tss -run=^$ -fuzz=FuzzParseWireMessage -fuzztime=2s
 go mod verify
@@ -44,6 +48,22 @@ git diff --check
 ```
 
 `govulncheck` reported no reachable vulnerabilities with patched Go 1.25.11. It reported two advisories in imported packages and one in required modules as unreachable; these should remain monitored by CI and Dependabot.
+
+## Race-test adequacy
+
+The race detector instruments executed code; it does not create adversarial
+interleavings or prove that unexecuted paths are race-free. The earlier full-suite
+job missed R11 because no test delivered malformed wire bytes through
+`UpdateFromBytes` while another goroutine advanced the same party's round. It
+missed R12 because no test deliberately held a fatal update inside the mutex while
+a second update waited behind it.
+
+The remediation combines complementary gates: a full `go test -race ./...` run,
+deterministic channel-controlled terminalization coverage, and repeated live EdDSA
+sessions that inject non-member messages and malformed wire bytes during honest
+round advancement while querying status/error helpers. CI runs the targeted cases
+ten times after the full race suite. Parser fuzzing remains separate because fuzzing
+byte inputs does not by itself explore concurrent schedules.
 
 ## Compatibility and staged breaking behavior
 

@@ -62,6 +62,9 @@ jobs:
       - name: Run all tests with the race detector
         run: make test_unit_race
 
+      - name: Stress lifecycle race regressions
+        run: make test_lifecycle_race
+
   security:
     name: 'Vet and vulnerability scan'
     runs-on: ubuntu-24.04
