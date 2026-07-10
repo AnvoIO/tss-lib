@@ -44,8 +44,8 @@ jobs:
       - name: Test
         run: go test -timeout 60m ./...
 
-  test-signing-race:
-    name: 'Signing race regression'
+  test-race:
+    name: 'Full race detector'
     runs-on: ubuntu-24.04
     steps:
       - name: Check out repository
@@ -59,8 +59,8 @@ jobs:
           go-version: '1.26.x'
           cache-dependency-path: go.sum
 
-      - name: Run signing race regression tests
-        run: make test_signing_race
+      - name: Run all tests with the race detector
+        run: make test_unit_race
 
   security:
     name: 'Vet and vulnerability scan'
