@@ -7,6 +7,7 @@
 package tss
 
 import (
+	"math/big"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -141,4 +142,103 @@ func TestSetConcurrencyClampsToMinimum(t *testing.T) {
 
 	params.SetConcurrency(4)
 	assert.Equal(t, 4, params.Concurrency())
+}
+
+func TestSessionNonceMustBePositiveAndIsCopied(t *testing.T) {
+	ids := GenerateTestPartyIDs(3)
+	params, err := NewParameters(EC(), NewPeerContext(ids), ids[0], 3, 1)
+	assert.NoError(t, err)
+
+	assert.Error(t, params.ValidateSessionNonce())
+	params.SetSessionNonce(big.NewInt(0))
+	assert.Error(t, params.ValidateSessionNonce())
+	params.SetSessionNonce(big.NewInt(-1))
+	assert.Error(t, params.ValidateSessionNonce())
+
+	nonce := big.NewInt(7)
+	params.SetSessionNonce(nonce)
+	assert.NoError(t, params.ValidateSessionNonce())
+	nonce.SetInt64(99)
+	assert.Equal(t, int64(7), params.SessionNonce().Int64())
+
+	returned := params.SessionNonce()
+	returned.SetInt64(42)
+	assert.Equal(t, int64(7), params.SessionNonce().Int64())
+}
+
+func TestNewParametersRejectsInvalidPeerContexts(t *testing.T) {
+	ids := GenerateTestPartyIDs(3)
+
+	_, err := NewParameters(EC(), NewPeerContext(ids[:2]), ids[0], 3, 1)
+	assert.ErrorContains(t, err, "expected 3")
+
+	duplicate := SortedPartyIDs{
+		NewPartyID("p1", "p1", big.NewInt(1)),
+		NewPartyID("p2", "p2", big.NewInt(1)),
+		NewPartyID("p3", "p3", big.NewInt(3)),
+	}
+	for i := range duplicate {
+		duplicate[i].Index = i
+	}
+	_, err = NewParameters(EC(), NewPeerContext(duplicate), duplicate[0], 3, 1)
+	assert.ErrorContains(t, err, "duplicate party keys")
+
+	notMember := NewPartyID("outsider", "outsider", big.NewInt(999))
+	_, err = NewParameters(EC(), NewPeerContext(ids), notMember, 3, 1)
+	assert.ErrorContains(t, err, "not a member")
+
+	wrongIndex := &PartyID{
+		MessageWrapper_PartyID: ids[0].MessageWrapper_PartyID,
+		Index:                  999,
+	}
+	_, err = NewParameters(EC(), NewPeerContext(ids), wrongIndex, 3, 1)
+	assert.ErrorContains(t, err, "does not match committee position")
+}
+
+func TestNewParametersRejectsPartyKeysInvalidModuloCurveOrder(t *testing.T) {
+	q := EC().Params().N
+	zeroModuloQ := SortPartyIDs(UnSortedPartyIDs{
+		NewPartyID("p1", "p1", big.NewInt(1)),
+		NewPartyID("p2", "p2", new(big.Int).Set(q)),
+	})
+	_, err := NewParameters(EC(), NewPeerContext(zeroModuloQ), zeroModuloQ[0], 2, 1)
+	assert.ErrorContains(t, err, "zero modulo the curve order")
+
+	collidingModuloQ := SortPartyIDs(UnSortedPartyIDs{
+		NewPartyID("p1", "p1", big.NewInt(1)),
+		NewPartyID("p2", "p2", new(big.Int).Add(q, big.NewInt(1))),
+	})
+	_, err = NewParameters(EC(), NewPeerContext(collidingModuloQ), collidingModuloQ[0], 2, 1)
+	assert.ErrorContains(t, err, "collide modulo the curve order")
+}
+
+func TestReSharingParametersUseCommitteeLocalIndexes(t *testing.T) {
+	oldIDs := SortPartyIDs(UnSortedPartyIDs{
+		NewPartyID("old-1", "old-1", big.NewInt(1)),
+		NewPartyID("both", "both", big.NewInt(2)),
+		NewPartyID("old-3", "old-3", big.NewInt(3)),
+	})
+	newIDs := SortPartyIDs(UnSortedPartyIDs{
+		NewPartyID("both", "both", big.NewInt(2)),
+		NewPartyID("new-4", "new-4", big.NewInt(4)),
+		NewPartyID("new-5", "new-5", big.NewInt(5)),
+		NewPartyID("new-6", "new-6", big.NewInt(6)),
+	})
+
+	params, err := NewReSharingParameters(
+		EC(),
+		NewPeerContext(oldIDs),
+		NewPeerContext(newIDs),
+		oldIDs[1],
+		len(oldIDs), 1,
+		len(newIDs), 2,
+	)
+	assert.NoError(t, err)
+
+	oldIndex, ok := params.OldPartyIndex()
+	assert.True(t, ok)
+	assert.Equal(t, 1, oldIndex)
+	newIndex, ok := params.NewPartyIndex()
+	assert.True(t, ok)
+	assert.Equal(t, 0, newIndex)
 }

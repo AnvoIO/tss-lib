@@ -125,7 +125,7 @@ func GetRandomBytes(rand io.Reader, length int) ([]byte, error) {
 	}
 
 	buf := make([]byte, length)
-	_, err := rand.Read(buf)
+	_, err := io.ReadFull(rand, buf)
 	if err != nil {
 		return nil, err
 	}

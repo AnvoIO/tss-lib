@@ -36,6 +36,7 @@ func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySave
 	for i := 0; i < len(signPIDs); i++ {
 		params, pErr := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), testThreshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
@@ -124,7 +125,8 @@ func TestClear_EdDSA_ZerosSecretMaterial(t *testing.T) {
 
 	// Populate fields with known non-zero values
 	td.wi = big.NewInt(123)
-	td.m = big.NewInt(456)
+	message := []byte{4, 5, 6}
+	td.message = message
 	td.ri = big.NewInt(789)
 	td.r = big.NewInt(101)
 	td.si = &[32]byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16,
@@ -137,8 +139,10 @@ func TestClear_EdDSA_ZerosSecretMaterial(t *testing.T) {
 	assert.Equal(t, int64(0), td.wi.Int64(), "wi should be zeroed")
 	assert.Equal(t, int64(0), td.ri.Int64(), "ri should be zeroed")
 	assert.Equal(t, int64(0), td.r.Int64(), "r should be zeroed")
-	// m should be nil'd (externally provided)
-	assert.Nil(t, td.m, "m should be nil after Clear()")
+	assert.Nil(t, td.message, "message should be nil after Clear()")
+	for i, b := range message {
+		assert.Equal(t, byte(0), b, "message[%d] should be zeroed", i)
+	}
 	// si byte array should be zeroed
 	for i, b := range td.si {
 		assert.Equal(t, byte(0), b, "si[%d] should be zeroed", i)

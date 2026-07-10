@@ -25,6 +25,13 @@ func (f failReader) Read([]byte) (int, error) { return 0, errors.New("mock rando
 
 var _ io.Reader = failReader{}
 
+type oneByteReader struct{}
+
+func (oneByteReader) Read(p []byte) (int, error) {
+	p[0] = 0xaa
+	return 1, nil
+}
+
 const (
 	randomIntBitLen = 1024
 )
@@ -107,6 +114,12 @@ func TestGetRandomBytes_InvalidLength(t *testing.T) {
 func TestGetRandomBytes_ReaderFailure(t *testing.T) {
 	_, err := common.GetRandomBytes(failReader{}, 32)
 	assert.Error(t, err)
+}
+
+func TestGetRandomBytes_FillsAcrossShortReads(t *testing.T) {
+	got, err := common.GetRandomBytes(oneByteReader{}, 4)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte{0xaa, 0xaa, 0xaa, 0xaa}, got)
 }
 
 func TestIsNumberInMultiplicativeGroup_EdgeCases(t *testing.T) {

@@ -40,6 +40,7 @@ func runSigningE2E(t *testing.T, msg *big.Int) *common.SignatureData {
 	for i := 0; i < len(signPIDs); i++ {
 		params, pErr := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), testThreshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {

@@ -71,12 +71,14 @@ func runAdversarialResharing(t *testing.T, updater func(tss.Party, tss.Message, 
 	for j, pID := range oldPIDs {
 		params, pErr := tss.NewReSharingParameters(tss.S256(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(params, oldKeys[j], outCh, endCh).(*LocalParty)
 		oldCommittee = append(oldCommittee, P)
 	}
 	for j, pID := range newPIDs {
 		params, pErr := tss.NewReSharingParameters(tss.S256(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		params.SetNoProofMod()
 		params.SetNoProofFac()
 		save := keygen.NewLocalPartySaveData(newPCount)

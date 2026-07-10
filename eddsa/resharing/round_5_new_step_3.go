@@ -8,6 +8,7 @@ package resharing
 
 import (
 	"errors"
+	"math/big"
 
 	"github.com/AnvoIO/tss-lib/v3/tss"
 )
@@ -26,13 +27,14 @@ func (round *round5) Start() *tss.Error {
 		// for this P: SAVE data
 		round.save.BigXj = round.temp.newBigXjs
 		round.save.ShareID = round.PartyID().KeyInt()
-		round.save.Xi = round.temp.newXi
+		round.save.Xi = new(big.Int).Set(round.temp.newXi)
 		round.save.Ks = round.temp.newKs
 
 	} else if round.IsOldCommittee() {
 		round.input.Xi.SetInt64(0)
 	}
 
+	round.temp.Clear()
 	round.end <- round.save
 	return nil
 }

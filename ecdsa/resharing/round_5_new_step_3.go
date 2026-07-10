@@ -25,7 +25,10 @@ func (round *round5) Start() *tss.Error {
 	round.allNewOK()
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	i, ok := round.ReSharingParams().NewPartyIndex()
+	if round.IsNewCommittee() && !ok {
+		return round.WrapError(errors.New("local party is not in the new committee"), Pi)
+	}
 
 	if round.IsNewCommittee() {
 		// 21.
@@ -33,7 +36,7 @@ func (round *round5) Start() *tss.Error {
 		ContextI := append(round.temp.ssid, big.NewInt(int64(i)).Bytes()...)
 		round.save.BigXj = round.temp.newBigXjs
 		round.save.ShareID = round.PartyID().KeyInt()
-		round.save.Xi = round.temp.newXi
+		round.save.Xi = new(big.Int).Set(round.temp.newXi)
 		round.save.Ks = round.temp.newKs
 
 		// misc: build list of paillier public keys to save
@@ -71,6 +74,7 @@ func (round *round5) Start() *tss.Error {
 		round.input.Xi.SetInt64(0)
 	}
 
+	round.temp.Clear()
 	round.end <- round.save
 	return nil
 }

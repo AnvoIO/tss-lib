@@ -26,11 +26,9 @@ type (
 		threshold           int
 		concurrency         int
 		safePrimeGenTimeout time.Duration
-		// sessionNonce provides per-session SSID uniqueness for GG20 session binding.
-		// For signing, defaults to the message hash if not set.
-		// For keygen/resharing, the caller SHOULD set this to a value agreed upon by
-		// all parties (e.g., a coordinator-assigned session ID) to prevent cross-session
-		// proof replay. If not set, falls back to 0 (no session binding).
+		// sessionNonce provides per-session SSID uniqueness. It remains optional
+		// for v3 compatibility, but callers should always set a fresh positive
+		// value; v4 makes this mandatory.
 		sessionNonce *big.Int
 		// for keygen
 		noProofMod bool
@@ -53,6 +51,10 @@ const (
 
 // Exported, used in `tss` client
 func NewParameters(ec elliptic.Curve, ctx *PeerContext, partyID *PartyID, partyCount, threshold int) (*Parameters, error) {
+	return newParameters(ec, ctx, partyID, partyCount, threshold, true)
+}
+
+func newParameters(ec elliptic.Curve, ctx *PeerContext, partyID *PartyID, partyCount, threshold int, requirePartyMembership bool) (*Parameters, error) {
 	if ec == nil {
 		return nil, fmt.Errorf("NewParameters: ec curve must not be nil")
 	}
@@ -71,6 +73,25 @@ func NewParameters(ec elliptic.Curve, ctx *PeerContext, partyID *PartyID, partyC
 	if threshold >= partyCount {
 		return nil, fmt.Errorf("NewParameters: threshold must be < partyCount, got threshold=%d partyCount=%d", threshold, partyCount)
 	}
+	contextCount := partyCount
+	if !requirePartyMembership {
+		contextCount = len(ctx.IDs())
+	}
+	if err := validatePeerContext(ctx, contextCount); err != nil {
+		return nil, err
+	}
+	if err := validatePartyKeysForCurve(ec, ctx); err != nil {
+		return nil, err
+	}
+	if requirePartyMembership {
+		partyIndex, ok := ctx.IDs().IndexOf(partyID)
+		if !ok {
+			return nil, fmt.Errorf("NewParameters: partyID is not a member of the peer context")
+		}
+		if partyID.Index != partyIndex {
+			return nil, fmt.Errorf("NewParameters: partyID index %d does not match committee position %d", partyID.Index, partyIndex)
+		}
+	}
 	return &Parameters{
 		ec:                  ec,
 		parties:             ctx,
@@ -82,6 +103,46 @@ func NewParameters(ec elliptic.Curve, ctx *PeerContext, partyID *PartyID, partyC
 		partialKeyRand:      rand.Reader,
 		rand:                rand.Reader,
 	}, nil
+}
+
+func validatePeerContext(ctx *PeerContext, partyCount int) error {
+	ids := ctx.IDs()
+	if len(ids) != partyCount {
+		return fmt.Errorf("NewParameters: peer context has %d parties, expected %d", len(ids), partyCount)
+	}
+	for i, party := range ids {
+		if party == nil || !party.ValidateBasic() {
+			return fmt.Errorf("NewParameters: peer context contains an invalid party at position %d", i)
+		}
+		if i == 0 {
+			continue
+		}
+		cmp := ids[i-1].KeyInt().Cmp(party.KeyInt())
+		if cmp == 0 {
+			return fmt.Errorf("NewParameters: peer context contains duplicate party keys at positions %d and %d", i-1, i)
+		}
+		if cmp > 0 {
+			return fmt.Errorf("NewParameters: peer context is not sorted by party key")
+		}
+	}
+	return nil
+}
+
+func validatePartyKeysForCurve(ec elliptic.Curve, ctx *PeerContext) error {
+	q := ec.Params().N
+	seen := make(map[string]int, len(ctx.IDs()))
+	for i, party := range ctx.IDs() {
+		reduced := new(big.Int).Mod(party.KeyInt(), q)
+		if reduced.Sign() == 0 {
+			return fmt.Errorf("NewParameters: party key at position %d is zero modulo the curve order", i)
+		}
+		encoded := string(reduced.Bytes())
+		if previous, ok := seen[encoded]; ok {
+			return fmt.Errorf("NewParameters: party keys at positions %d and %d collide modulo the curve order", previous, i)
+		}
+		seen[encoded] = i
+	}
+	return nil
 }
 
 func (params *Parameters) EC() elliptic.Curve {
@@ -151,7 +212,10 @@ func (params *Parameters) SetRand(rand io.Reader) {
 // SessionNonce returns the per-session nonce for SSID uniqueness.
 // Returns nil if not set.
 func (params *Parameters) SessionNonce() *big.Int {
-	return params.sessionNonce
+	if params.sessionNonce == nil {
+		return nil
+	}
+	return new(big.Int).Set(params.sessionNonce)
 }
 
 // SetSessionNonce sets a per-session nonce that all parties must agree on.
@@ -159,16 +223,30 @@ func (params *Parameters) SessionNonce() *big.Int {
 // cross-session proof replay attacks. All parties in the same session MUST use
 // the same nonce value. The caller is responsible for coordinating this.
 func (params *Parameters) SetSessionNonce(nonce *big.Int) {
-	params.sessionNonce = nonce
+	if nonce == nil {
+		params.sessionNonce = nil
+		return
+	}
+	params.sessionNonce = new(big.Int).Set(nonce)
+}
+
+func (params *Parameters) ValidateSessionNonce() error {
+	if params == nil || params.sessionNonce == nil || params.sessionNonce.Sign() <= 0 {
+		return fmt.Errorf("a positive session nonce agreed by all parties is required")
+	}
+	return nil
 }
 
 // ----- //
 
 // Exported, used in `tss` client
 func NewReSharingParameters(ec elliptic.Curve, ctx, newCtx *PeerContext, partyID *PartyID, partyCount, threshold, newPartyCount, newThreshold int) (*ReSharingParameters, error) {
-	params, err := NewParameters(ec, ctx, partyID, partyCount, threshold)
+	params, err := newParameters(ec, ctx, partyID, partyCount, threshold, false)
 	if err != nil {
 		return nil, err
+	}
+	if len(ctx.IDs()) < threshold+1 {
+		return nil, fmt.Errorf("NewReSharingParameters: old peer context has %d active parties, need at least %d", len(ctx.IDs()), threshold+1)
 	}
 	if newCtx == nil {
 		return nil, fmt.Errorf("NewReSharingParameters: new peer context must not be nil")
@@ -181,6 +259,17 @@ func NewReSharingParameters(ec elliptic.Curve, ctx, newCtx *PeerContext, partyID
 	}
 	if newThreshold >= newPartyCount {
 		return nil, fmt.Errorf("NewReSharingParameters: newThreshold must be < newPartyCount, got newThreshold=%d newPartyCount=%d", newThreshold, newPartyCount)
+	}
+	if err := validatePeerContext(newCtx, newPartyCount); err != nil {
+		return nil, fmt.Errorf("NewReSharingParameters: invalid new peer context: %w", err)
+	}
+	if err := validatePartyKeysForCurve(ec, newCtx); err != nil {
+		return nil, fmt.Errorf("NewReSharingParameters: invalid new peer context: %w", err)
+	}
+	_, isOld := ctx.IDs().IndexOf(partyID)
+	_, isNew := newCtx.IDs().IndexOf(partyID)
+	if !isOld && !isNew {
+		return nil, fmt.Errorf("NewReSharingParameters: partyID is not a member of either committee")
 	}
 	return &ReSharingParameters{
 		Parameters:    params,
@@ -210,6 +299,14 @@ func (rgParams *ReSharingParameters) NewThreshold() int {
 	return rgParams.newThreshold
 }
 
+func (rgParams *ReSharingParameters) OldPartyIndex() (int, bool) {
+	return rgParams.OldParties().IDs().IndexOf(rgParams.PartyID())
+}
+
+func (rgParams *ReSharingParameters) NewPartyIndex() (int, bool) {
+	return rgParams.NewParties().IDs().IndexOf(rgParams.PartyID())
+}
+
 func (rgParams *ReSharingParameters) OldAndNewParties() []*PartyID {
 	return append(rgParams.OldParties().IDs(), rgParams.NewParties().IDs()...)
 }
@@ -219,21 +316,11 @@ func (rgParams *ReSharingParameters) OldAndNewPartyCount() int {
 }
 
 func (rgParams *ReSharingParameters) IsOldCommittee() bool {
-	partyID := rgParams.partyID
-	for _, Pj := range rgParams.parties.IDs() {
-		if partyID.KeyInt().Cmp(Pj.KeyInt()) == 0 {
-			return true
-		}
-	}
-	return false
+	_, ok := rgParams.OldPartyIndex()
+	return ok
 }
 
 func (rgParams *ReSharingParameters) IsNewCommittee() bool {
-	partyID := rgParams.partyID
-	for _, Pj := range rgParams.newParties.IDs() {
-		if partyID.KeyInt().Cmp(Pj.KeyInt()) == 0 {
-			return true
-		}
-	}
-	return false
+	_, ok := rgParams.NewPartyIndex()
+	return ok
 }

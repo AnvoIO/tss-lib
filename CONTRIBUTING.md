@@ -32,7 +32,7 @@ Guidelines for bug reports:
 
 1. **Use the GitHub issue search** &mdash; check if the issue has already been reported.
 
-1. **Check if the issue has been fixed** &mdash; look for [closed issues in the current milestone](https://github.com/AnvoIO/tss-lib/issues?q=is%3Aissue+is%3Aclosed) or try to reproduce it using the latest `main` branch.
+1. **Check if the issue has been fixed** &mdash; look for [closed issues in the current milestone](https://github.com/AnvoIO/tss-lib/issues?q=is%3Aissue+is%3Aclosed) or try to reproduce it using the latest `master` branch.
 
 A good bug report shouldn't leave others needing to chase you up for more information. Be sure to include the details of your environment and relevant tests that demonstrate the failure.
 
@@ -61,7 +61,7 @@ Also, please follow these guidelines when submitting code:
 
 ### Feature Branches
 
-- **[main](https://github.com/AnvoIO/tss-lib/tree/main)** is the development branch. All work on the next release happens here so you should generally branch off `main`. Do **NOT** use this branch for a production site.
+- **[master](https://github.com/AnvoIO/tss-lib/tree/master)** is the development branch. All work on the next release happens here, so branch from `master`.
 - **[release/x.y](https://github.com/AnvoIO/tss-lib/releases)** will contain the corresponding branch for the given `x.y` release, if any. Do **NOT** use these branches to work on source.
 
 ### Submitting Pull Requests
@@ -72,7 +72,15 @@ Pull requests are awesome. If you're looking to raise a PR for something which d
 
 Never underestimate just how useful quality assurance is. If you're looking to get involved with the code base and don't know where to start, checking out and testing a pull request is one of the most useful things you could do.
 
-Essentially, [check out the latest main branch](#working-on-tss-lib), take it for a spin, and if you find anything odd, please follow the [bug report guidelines](#bug-reports) and let us know!
+Before submitting, run:
+
+```bash
+go test ./...
+go vet ./...
+go tool govulncheck ./...
+```
+
+Cryptographic and protocol changes also require an adversarial regression, relevant race tests, and the review record described in [GOVERNANCE.md](./GOVERNANCE.md). Security reports must follow [SECURITY.md](./SECURITY.md), not the public issue tracker.
 
 ## Conduct
 

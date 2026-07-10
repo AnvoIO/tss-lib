@@ -7,6 +7,7 @@
 package keygen
 
 import (
+	"math/big"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -53,6 +54,7 @@ func runAdversarialEdDSAKeygen(t *testing.T, updater func(tss.Party, tss.Message
 	for i := 0; i < len(pIDs); i++ {
 		params, pErr := tss.NewParameters(tss.Edwards(), p2pCtx, pIDs[i], len(pIDs), threshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(params, outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {

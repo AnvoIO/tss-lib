@@ -17,8 +17,9 @@ import (
 
 const (
 	// Iterations controls the soundness of the mod proof: 80 iterations → 2^{-80} soundness error.
-	Iterations         = 80
-	ProofModBytesParts = Iterations*2 + 3
+	Iterations           = 80
+	ProofModBytesParts   = Iterations*2 + 3
+	MaxProofElementBytes = 512
 )
 
 var one = big.NewInt(1)
@@ -103,7 +104,7 @@ func NewProof(Session []byte, N, P, Q *big.Int, rand io.Reader) (*ProofMod, erro
 }
 
 func NewProofFromBytes(bzs [][]byte) (*ProofMod, error) {
-	if !common.NonEmptyMultiBytes(bzs, ProofModBytesParts) {
+	if !common.NonEmptyMultiBytesBounded(bzs, MaxProofElementBytes, ProofModBytesParts) {
 		return nil, fmt.Errorf("expected %d byte parts to construct ProofMod", ProofModBytesParts)
 	}
 	bis := make([]*big.Int, len(bzs))

@@ -48,7 +48,10 @@ func (round *round4) Start() *tss.Error {
 	dlnVerifier := keygen.NewDlnProofVerifier(round.Concurrency())
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	i, ok := round.ReSharingParams().NewPartyIndex()
+	if !ok {
+		return round.WrapError(errors.New("local party is not in the new committee"), Pi)
+	}
 	round.newOK[i] = true
 
 	// 1-3. verify paillier & dln proofs, store message pieces, ensure uniqueness of h1j, h2j

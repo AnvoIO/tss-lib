@@ -49,6 +49,7 @@ func TestStartRound1Paillier(t *testing.T) {
 	threshold := 1
 	params, err := tss.NewParameters(tss.EC(), p2pCtx, pIDs[0], len(pIDs), threshold)
 	assert.NoError(t, err)
+	params.SetSessionNonce(big.NewInt(1))
 
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {
@@ -90,6 +91,7 @@ func TestFinishAndSaveH1H2(t *testing.T) {
 	threshold := 1
 	params, err := tss.NewParameters(tss.EC(), p2pCtx, pIDs[0], len(pIDs), threshold)
 	assert.NoError(t, err)
+	params.SetSessionNonce(big.NewInt(1))
 
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {
@@ -138,6 +140,7 @@ func TestBadMessageCulprits(t *testing.T) {
 	p2pCtx := tss.NewPeerContext(pIDs)
 	params, err := tss.NewParameters(tss.S256(), p2pCtx, pIDs[0], len(pIDs), 1)
 	assert.NoError(t, err)
+	params.SetSessionNonce(big.NewInt(1))
 
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {
@@ -198,6 +201,7 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 		var P *LocalParty
 		params, err := tss.NewParameters(tss.S256(), p2pCtx, pIDs[i], len(pIDs), threshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 		// do not use in untrusted setting
 		params.SetNoProofMod()
 		// do not use in untrusted setting
