@@ -52,6 +52,20 @@ func NonEmptyMultiBytes(bzs [][]byte, expectLen ...int) bool {
 	return true
 }
 
+// NonEmptyMultiBytesBounded validates both shape and per-element size before
+// callers convert peer-controlled bytes into arbitrary-precision integers.
+func NonEmptyMultiBytesBounded(bzs [][]byte, maxElementBytes int, expectLen ...int) bool {
+	if maxElementBytes < 1 || !NonEmptyMultiBytes(bzs, expectLen...) {
+		return false
+	}
+	for _, bz := range bzs {
+		if len(bz) > maxElementBytes {
+			return false
+		}
+	}
+	return true
+}
+
 // PadToLengthBytesInPlace pad {0, ...} to the front of src if len(src) < length
 // output length is equal to the parameter length
 func PadToLengthBytesInPlace(src []byte, length int) []byte {

@@ -138,6 +138,30 @@ func TestParseSecrets(t *testing.T) {
 			},
 		},
 		wantErr: true,
+	}, {
+		name: "Errors: Negative part length",
+		args: args{
+			[]*big.Int{big.NewInt(-1), one},
+		},
+		wantErr: true,
+	}, {
+		name: "Errors: Nil part length",
+		args: args{
+			[]*big.Int{nil, one},
+		},
+		wantErr: true,
+	}, {
+		name: "Errors: Part length does not fit int64",
+		args: args{
+			[]*big.Int{new(big.Int).Lsh(big.NewInt(1), 63), one},
+		},
+		wantErr: true,
+	}, {
+		name: "Errors: Trailing part length",
+		args: args{
+			[]*big.Int{one, one, one},
+		},
+		wantErr: true,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -151,4 +175,31 @@ func TestParseSecrets(t *testing.T) {
 			}
 		})
 	}
+}
+
+func FuzzParseSecrets(f *testing.F) {
+	f.Add([]byte{1, 1})
+	f.Add([]byte{0xff, 1})
+	f.Add([]byte{3, 1, 2, 3})
+
+	f.Fuzz(func(t *testing.T, data []byte) {
+		secrets := make([]*big.Int, len(data))
+		for i, value := range data {
+			switch {
+			case value == 0xff:
+				secrets[i] = new(big.Int).Lsh(big.NewInt(1), 128)
+			case value&0x80 != 0:
+				secrets[i] = big.NewInt(-int64(value & 0x7f))
+			default:
+				secrets[i] = big.NewInt(int64(value))
+			}
+		}
+
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				t.Fatalf("ParseSecrets panicked for %x: %v", data, recovered)
+			}
+		}()
+		_, _ = ParseSecrets(secrets)
+	})
 }

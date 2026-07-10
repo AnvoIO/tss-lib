@@ -31,20 +31,14 @@ func (round *round1) Start() *tss.Error {
 		return round.WrapError(errors.New("round already started"))
 	}
 
-	if round.temp.m.Sign() < 0 {
-		return round.WrapError(errors.New("hashed message is not valid"))
-	}
-
 	round.number = 1
 	round.started = true
 	round.resetOK()
 
-	// GG20 session binding: use caller-provided session nonce if available,
-	// otherwise fall back to the message hash for per-session SSID uniqueness.
 	if nonce := round.Params().SessionNonce(); nonce != nil {
-		round.temp.ssidNonce = new(big.Int).Set(nonce)
+		round.temp.ssidNonce = nonce
 	} else {
-		round.temp.ssidNonce = new(big.Int).Set(round.temp.m)
+		round.temp.ssidNonce = new(big.Int).SetBytes(round.temp.message)
 	}
 	var err error
 	round.temp.ssid, err = round.getSSID()

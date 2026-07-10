@@ -27,7 +27,10 @@ func (round *round2) Start() *tss.Error {
 	round.allNewOK()
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	i, ok := round.ReSharingParams().NewPartyIndex()
+	if !ok {
+		return round.WrapError(errors.New("local party is not in the new committee"), Pi)
+	}
 
 	// 1. "broadcast" "ACK" members of the OLD committee
 	r2msg := NewDGRound2Message(round.OldParties().IDs(), Pi)

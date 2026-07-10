@@ -20,6 +20,7 @@ import (
 
 const (
 	RangeProofAliceBytesParts = 6
+	MaxProofElementBytes      = 1024
 )
 
 var (
@@ -93,7 +94,7 @@ func ProveRangeAlice(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, 
 }
 
 func RangeProofAliceFromBytes(bzs [][]byte) (*RangeProofAlice, error) {
-	if !common.NonEmptyMultiBytes(bzs, RangeProofAliceBytesParts) {
+	if !common.NonEmptyMultiBytesBounded(bzs, MaxProofElementBytes, RangeProofAliceBytesParts) {
 		return nil, fmt.Errorf("expected %d byte parts to construct RangeProofAlice", RangeProofAliceBytesParts)
 	}
 	return &RangeProofAlice{

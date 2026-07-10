@@ -64,6 +64,7 @@ func TestE2EConcurrent(t *testing.T) {
 	for i := 0; i < len(signPIDs); i++ {
 		params, err := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 		assert.NoError(t, err)
+		// Deliberately omit SessionNonce here to cover the deprecated v3 fallback.
 
 		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
@@ -158,7 +159,8 @@ func TestE2EConcurrentWithLeadingZeroInMSG(t *testing.T) {
 	for i := 0; i < len(signPIDs); i++ {
 		params, err := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 		assert.NoError(t, err)
-		P := NewLocalParty(new(big.Int).SetBytes(msg), params, keys[i], outCh, endCh, len(msg)).(*LocalParty)
+		params.SetSessionNonce(big.NewInt(1))
+		P := NewLocalPartyWithBytes(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
 			if err := P.Start(); err != nil {
@@ -221,4 +223,24 @@ signing:
 			}
 		}
 	}
+}
+
+func TestLegacyMessageBytesRejectsInvalidLengths(t *testing.T) {
+	assert.NotPanics(t, func() {
+		message, err := legacyMessageBytes(big.NewInt(256), 1)
+		assert.Nil(t, message)
+		assert.Error(t, err)
+	})
+
+	message, err := legacyMessageBytes(big.NewInt(1), 3)
+	assert.NoError(t, err)
+	assert.Equal(t, []byte{0, 0, 1}, message)
+
+	message, err = legacyMessageBytes(nil)
+	assert.Nil(t, message)
+	assert.Error(t, err)
+
+	message, err = legacyMessageBytes(big.NewInt(-1))
+	assert.Nil(t, message)
+	assert.Error(t, err)
 }

@@ -64,6 +64,7 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 		var P *LocalParty
 		params, err := tss.NewParameters(tss.Edwards(), p2pCtx, pIDs[i], len(pIDs), threshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 		if i < len(fixtures) {
 			P = NewLocalParty(params, outCh, endCh).(*LocalParty)
 		} else {

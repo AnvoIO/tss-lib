@@ -17,7 +17,8 @@ import (
 )
 
 const (
-	ProofFacBytesParts = 11
+	ProofFacBytesParts   = 11
+	MaxProofElementBytes = 1024
 )
 
 type (
@@ -104,7 +105,7 @@ func NewProof(Session []byte, ec elliptic.Curve, N0, NCap, s, t, N0p, N0q *big.I
 }
 
 func NewProofFromBytes(bzs [][]byte) (*ProofFac, error) {
-	if !common.NonEmptyMultiBytes(bzs, ProofFacBytesParts) {
+	if !common.NonEmptyMultiBytesBounded(bzs, MaxProofElementBytes, ProofFacBytesParts) {
 		return nil, fmt.Errorf("expected %d byte parts to construct ProofFac", ProofFacBytesParts)
 	}
 	return &ProofFac{

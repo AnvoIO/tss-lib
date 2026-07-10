@@ -93,6 +93,26 @@ func NewLocalParty(
 	return p
 }
 
+func (td *localTempData) Clear() {
+	for _, share := range td.NewShares {
+		if share != nil && share.Share != nil {
+			share.Share.SetInt64(0)
+		}
+	}
+	for _, value := range td.VD {
+		if value != nil {
+			value.SetInt64(0)
+		}
+	}
+	if td.newXi != nil {
+		td.newXi.SetInt64(0)
+	}
+}
+
+func (p *LocalParty) ClearSensitiveData() {
+	p.temp.Clear()
+}
+
 func (p *LocalParty) FirstRound() tss.Round {
 	return newRound1(p.params, &p.input, &p.save, &p.temp, p.out, p.end)
 }
@@ -117,19 +137,19 @@ func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	if ok, err := p.BaseParty.ValidateMessage(msg); !ok || err != nil {
 		return ok, err
 	}
-	// check that the message's "from index" will fit into the array
-	var maxFromIdx int
-	switch msg.Content().(type) {
-	case *DGRound2Message, *DGRound4Message:
-		maxFromIdx = len(p.params.NewParties().IDs()) - 1
-	default:
-		maxFromIdx = len(p.params.OldParties().IDs()) - 1
-	}
-	if maxFromIdx < msg.GetFrom().Index {
-		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
-			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
+	if _, ok := p.senderIndex(msg); !ok {
+		return false, p.WrapError(fmt.Errorf("message sender is not a member of the source committee"), msg.GetFrom())
 	}
 	return true, nil
+}
+
+func (p *LocalParty) senderIndex(msg tss.ParsedMessage) (int, bool) {
+	switch msg.Content().(type) {
+	case *DGRound2Message, *DGRound4Message:
+		return p.params.NewParties().IDs().IndexOf(msg.GetFrom())
+	default:
+		return p.params.OldParties().IDs().IndexOf(msg.GetFrom())
+	}
 }
 
 func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
@@ -137,7 +157,10 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
 		return ok, err
 	}
-	fromPIdx := msg.GetFrom().Index
+	fromPIdx, ok := p.senderIndex(msg)
+	if !ok {
+		return false, p.WrapError(fmt.Errorf("message sender is not a member of the source committee"), msg.GetFrom())
+	}
 
 	// switch/case is necessary to store any messages beyond current round
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.

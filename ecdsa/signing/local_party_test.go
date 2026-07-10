@@ -62,6 +62,7 @@ func TestE2EConcurrent(t *testing.T) {
 	for i := 0; i < len(signPIDs); i++ {
 		params, err := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(big.NewInt(42), params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
@@ -150,6 +151,7 @@ func TestE2EConcurrentWithLeadingZeroInMSG(t *testing.T) {
 	for i := 0; i < len(signPIDs); i++ {
 		params, err := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(new(big.Int).SetBytes(msgData), params, keys[i], outCh, endCh, len(msgData)).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {
@@ -251,6 +253,7 @@ func TestE2EWithHDKeyDerivation(t *testing.T) {
 	for i := 0; i < len(signPIDs); i++ {
 		params, err := tss.NewParameters(tss.S256(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 
 		P := NewLocalPartyWithKDD(big.NewInt(42), params, keys[i], keyDerivationDelta, outCh, endCh, 0).(*LocalParty)
 		parties = append(parties, P)

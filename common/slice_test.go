@@ -35,3 +35,11 @@ func TestPadToLengthBytesInPlaceNilSource(t *testing.T) {
 	assert.Equal(t, []byte{0x00, 0x00, 0x00}, out)
 	assert.Nil(t, src)
 }
+
+func TestNonEmptyMultiBytesBounded(t *testing.T) {
+	assert.True(t, NonEmptyMultiBytesBounded([][]byte{{1}, {2, 3}}, 2, 2))
+	assert.False(t, NonEmptyMultiBytesBounded([][]byte{{1}, {2, 3}}, 1, 2))
+	assert.False(t, NonEmptyMultiBytesBounded([][]byte{{1}}, 2, 2))
+	assert.False(t, NonEmptyMultiBytesBounded([][]byte{{}}, 2, 1))
+	assert.False(t, NonEmptyMultiBytesBounded([][]byte{{1}}, 0, 1))
+}

@@ -1,7 +1,9 @@
 MODULE = github.com/AnvoIO/tss-lib/v3
 PACKAGES = $(shell go list ./... | grep -v '/vendor/')
 SIGNING_PACKAGES = ./ecdsa/signing ./eddsa/signing
-SIGNING_RACE_REGEX = TestE2E_(SignZeroMessage|SignMaxMessage|ReSignSameKey)|TestE2E_EdDSA_(SignZeroMessage|SignMaxMessage|ReSignSameKey)
+SIGNING_RACE_REGEX = TestE2E_(SignZeroMessage|SignMaxMessage|ReSignSameKey)|TestE2E_EdDSA_(SignZeroMessage|SignMaxMessage|ReSignSameKey)|TestUpdateRejectsOutsiderWithoutClearingSensitiveData|TestE2EConcurrent(InvalidSender|MalformedWire)Validation
+LIFECYCLE_RACE_PACKAGES = ./tss ./eddsa/signing
+LIFECYCLE_RACE_REGEX = TestFatalUpdateTerminalizesBeforeQueuedUpdateRuns|TestE2EConcurrent(InvalidSender|MalformedWire)Validation
 
 all: protob test
 
@@ -38,6 +40,11 @@ test_signing_race:
 	go clean -testcache
 	go test -timeout 60m -race -count=1 $(SIGNING_PACKAGES) -run "$(SIGNING_RACE_REGEX)"
 
+test_lifecycle_race:
+	@echo "--> Stressing Party Lifecycle Race Regressions"
+	go clean -testcache
+	go test -timeout 60m -race -count=10 $(LIFECYCLE_RACE_PACKAGES) -run "$(LIFECYCLE_RACE_REGEX)"
+
 test:
 	make test_unit
 
@@ -51,4 +58,4 @@ pre_commit: build test
 # To avoid unintended conflicts with file names, always add to .PHONY
 # # unless there is a reason not to.
 # # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: protob build test_unit test_unit_race test_signing_race test
+.PHONY: protob build test_unit test_unit_race test_signing_race test_lifecycle_race test
