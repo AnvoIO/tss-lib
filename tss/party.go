@@ -29,17 +29,20 @@ type Party interface {
 	// with Start and Update.
 	Running() bool
 	WaitingFor() []*PartyID
-	// ValidateMessage and StoreMessage are low-level protocol hooks. Callers
-	// must not invoke them concurrently; use Update or UpdateFromBytes.
+	WrapError(err error, culprits ...*PartyID) *Error
+	// PartyID returns a defensive copy in v4.
+	PartyID() *PartyID
+	String() string
+}
+
+// protocolParty contains implementation hooks used by BaseStart and BaseUpdate.
+// Constructors expose Party so application code cannot bypass the serialized
+// Update/UpdateFromBytes entry points through this interface.
+type protocolParty interface {
+	Party
 	ValidateMessage(msg ParsedMessage) (bool, *Error)
 	StoreMessage(msg ParsedMessage) (bool, *Error)
 	FirstRound() Round
-	WrapError(err error, culprits ...*PartyID) *Error
-	// Treat the returned identity as immutable for the lifetime of the party.
-	PartyID() *PartyID
-	String() string
-
-	// Private lifecycle methods
 	setRound(Round) *Error
 	round() Round
 	advance()
@@ -208,7 +211,7 @@ type sensitiveDataClearer interface {
 	ClearSensitiveData()
 }
 
-func abortPartyLocked(p Party, err *Error) *Error {
+func abortPartyLocked(p protocolParty, err *Error) *Error {
 	if err == nil {
 		return nil
 	}
@@ -220,7 +223,7 @@ func abortPartyLocked(p Party, err *Error) *Error {
 	return err
 }
 
-func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error) {
+func BaseStart(p protocolParty, task string, prepare ...func(Round) *Error) (err *Error) {
 	p.lock()
 	defer p.unlock()
 	if p.lifecycle() != partyCreated {
@@ -265,7 +268,7 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error)
 }
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
-func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
+func BaseUpdate(p protocolParty, msg ParsedMessage, task string) (ok bool, err *Error) {
 	p.lock()
 	if p.lifecycle() == partyAborted {
 		err := p.terminalError()

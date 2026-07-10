@@ -363,7 +363,7 @@ func TestAdversarial_Resharing_MultipleCorruptedSharesReportsMultipleCulprits(t 
 	}
 
 	updater := func(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
-		if party.PartyID() == msg.GetFrom() {
+		if party.PartyID().KeyInt().Cmp(msg.GetFrom().KeyInt()) == 0 {
 			return
 		}
 		bz, _, err := msg.WireBytes()

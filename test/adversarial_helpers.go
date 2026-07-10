@@ -20,7 +20,7 @@ type MessageTamperFunc func(wireBytes []byte, from *tss.PartyID, isBroadcast boo
 func MaliciousUpdater(adversaryIdx int, tamperFn MessageTamperFunc) func(tss.Party, tss.Message, chan<- *tss.Error) {
 	return func(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
 		// do not send a message from this party back to itself
-		if party.PartyID() == msg.GetFrom() {
+		if party.PartyID().KeyInt().Cmp(msg.GetFrom().KeyInt()) == 0 {
 			return
 		}
 		bz, _, err := msg.WireBytes()
