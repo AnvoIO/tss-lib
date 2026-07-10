@@ -15,21 +15,36 @@ Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security
 
 ## Release line
 
-This source tree is the wire-compatible v3 maintenance line:
+This source tree is the breaking v4 release line, published concurrently with v3.1.0:
 
-- Go module: `github.com/AnvoIO/tss-lib/v3`
-- Release branch: `release/v3.1.0`
-- Current release: `v3.1.0`
+- Go module: `github.com/AnvoIO/tss-lib/v4`
+- Release branch: `release/v4.0.0`
+- First release: `v4.0.0`
 
-The breaking v4 API is released independently from its own branch and tag using
-module path `github.com/AnvoIO/tss-lib/v4`. It is not bundled into this source
-tree. Releasing v4 does not delete, replace, or invalidate tagged v3 source;
-future compatible v3 security fixes can continue from the v3 maintenance branch.
+The v3 API is not bundled into the v4 source tree. It remains available and
+maintained independently through the `v3.1.0` tag and the
+`release/v3.1.0` branch using module path
+`github.com/AnvoIO/tss-lib/v3`. Releasing v4 does not delete or invalidate
+tagged v3 source or existing v3 module downloads.
 
 Choose the major version through the Go import path. Do not mix v3 and v4
-participants in one keygen, signing, or resharing session. v3.1 preserves the v3
-protobuf/wire format and legacy nonce fallback; applications should nevertheless
-set a fresh positive session nonce for every run before migrating to v4.
+participants in one keygen, signing, or resharing session. Although v4 does not
+add protobuf fields relative to v3.1, its mandatory session nonce and stricter
+API contracts form a coordinated migration boundary.
+
+### v3.1.0 compared with v4.0.0
+
+| Area | v3.1.0 | v4.0.0 |
+| --- | --- | --- |
+| Release intent | Wire-compatible v3 maintenance | Breaking migration |
+| Go module | `github.com/AnvoIO/tss-lib/v3` | `github.com/AnvoIO/tss-lib/v4` |
+| Session nonce | Optional legacy fallback; fresh positive nonce strongly recommended | Fresh positive coordinated nonce required before `Party.Start()` |
+| Party identities | Reference-backed; callers must treat contexts and IDs as immutable | Constructor snapshots and identity accessors are defensive deep copies; `SetIDs` removed |
+| Public `Party` API | Low-level validation/storage/round hooks remain exposed but are not concurrent application entry points | Public interface narrowed to serialized lifecycle/update and concurrency-safe status/error operations |
+| Wire and transcript | v3 protobuf format and legacy transcript fallback retained | Same protobuf fields as v3.1, but mandatory nonce changes transcript acceptance |
+| Session deployment | Use only v3 participants | Use only v4 participants; migrate every party together |
+
+Both versions remain available from their separate tags and maintenance branches.
 
 ## Features
 
@@ -89,12 +104,12 @@ if err != nil {
     // handle error
 }
 
-// Strongly recommended in v3 and required in v4: use a fresh positive nonce
-// agreed by every participant. Never reuse it across protocol runs.
+// Required: use a fresh positive nonce agreed by every participant.
+// Never reuse it across protocol runs.
 params.SetSessionNonce(sessionNonce)
 ```
 
-For v3 compatibility, an unset nonce retains the legacy fallback. This is deprecated: set a fresh coordinated nonce before every keygen, signing, or resharing run so the integration is ready for v4.
+`Party.Start()` rejects a missing, zero, or negative nonce before protocol preparation begins. Set a fresh coordinated nonce before every keygen, signing, or resharing run.
 
 ### Key generation
 
@@ -148,9 +163,19 @@ same party; updates are serialized, valid messages that arrive just before
 are ignored. A fatal protocol error terminalizes the party and clears temporary
 secrets before any queued update can run. `Running`, `WaitingFor`, `String`,
 and `WrapError` are safe status/error helpers during concurrent delivery.
-`ValidateMessage` and `StoreMessage` are low-level hooks and must not be called
-directly from concurrent application code. Treat party IDs and peer contexts as
-immutable after constructing parameters.
+
+The public `Party` interface exposes only serialized update/lifecycle operations
+and concurrency-safe status/error helpers. Concrete protocol types retain
+`ValidateMessage`, `StoreMessage`, and `FirstRound` solely as implementation
+hooks; application code should not type-assert and call them directly.
+`NewPeerContext` and parameter constructors take deep identity snapshots, and
+`PeerContext.IDs()` / `Parameters.PartyID()` return deep copies. Compare party
+keys (or use `SortedPartyIDs.IndexOf`), never `*PartyID` pointer addresses.
+
+`PeerContext.IDs()` allocates a deep copy on each call; applications targeting
+very large committees should take one snapshot outside hot loops and reuse it
+within that operation. The copy preserves sorted order and committee-local index
+correspondence.
 
 ## How to use this securely
 
@@ -165,16 +190,23 @@ Inbound transports should reject messages above 4 MiB before buffering; `ParseWi
 
 ## Releases
 
-### v3.1.0: wire-compatible security and maintenance release
+### v4.0.0: mandatory sessions and immutable identities (breaking)
 
-This release preserves the v3 protobuf/wire format and existing session fallback
-while adding protocol-boundary validation, committee-local sender binding,
-terminal party lifecycle handling, malformed-wire and queued-abort race
-regressions, dependency maintenance, and repository governance controls.
-`Parameters.SetSessionNonce` remains optional for v3 compatibility but a fresh
-positive value agreed by every participant is strongly recommended. See the
-[`CHANGELOG`](./CHANGELOG.md) and
-[`security review`](./security/2026-07-10-security-maintenance-review.md).
+Released concurrently with v3.1.0, v4.0.0 requires a fresh positive session nonce before every
+`Party.Start()`, removes the legacy session fallback, changes the module path to
+`/v4`, freezes committee and local identity snapshots, and narrows the public
+`Party` interface to serialized application entry points. See the
+[`CHANGELOG`](./CHANGELOG.md) for migration details.
+
+### v3.1.0: wire-compatible security and maintenance release (separate v3 line)
+
+The v3.1 release remains at module path
+`github.com/AnvoIO/tss-lib/v3`. It preserves the v3 protobuf/wire format and
+legacy nonce fallback while adding protocol-boundary hardening, terminal party
+lifecycle handling, race regressions, dependency maintenance, and governance
+controls. A fresh positive nonce is strongly recommended. v3 source remains
+available from its own tag and maintenance branch; it is not copied into this
+v4 tree.
 
 ### v3.0.2: July 2026 resharing-continuity and protocol-logic update (non-breaking)
 
@@ -186,7 +218,7 @@ the upstream dual-committee resharing fix (`bnb-chain/tss-lib#128`) to EdDSA,
 corrects abort attribution in several resharing/signing paths, and adds a batch of
 defense-in-depth guards. A follow-up pass closed a reachable zero-scalar verifier
 DoS (`K13`), hardened two one-time secret-modulus inversions against timing leaks,
-and added ECDSA dual-committee test coverage. Found by a multi-agent audit of
+and added ECDSA dual-committee test coverage. Found by a security audit of
 resharing continuity and protocol-logic invariants. See the [`CHANGELOG`](./CHANGELOG.md) and
 [Appendix C of the audit report](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update).
 
@@ -195,21 +227,20 @@ resharing continuity and protocol-logic invariants. See the [`CHANGELOG`](./CHAN
 Security patch. No API or wire-format changes — interoperable with honest v3.0.0
 peers. Closes two input-validation gaps cross-referenced from upstream advisories
 (`SRC-2026-573`, `SRC-2026-644`), including a remote denial-of-service against EdDSA
-signers, plus six defense-in-depth / canonicality hardenings found by a multi-agent
+signers, plus six defense-in-depth / canonicality hardenings found by a security
 boundary-validation audit. See the [`CHANGELOG`](./CHANGELOG.md) and
 [Appendix B of the audit report](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation).
 
 ## Breaking changes
 
-### v4.0: separate breaking release
+### v4.0: mandatory sessions, immutable identities, and module migration
 
-- Every protocol run requires a fresh positive `Parameters.SetSessionNonce` value agreed by all parties.
-- The Go module and internal import path changes from `/v3` to `/v4`.
-- Legacy zero/message-derived session fallbacks are removed.
-- Peer contexts and parameter identities become defensive snapshots.
-- The public `Party` interface no longer exposes low-level validation/storage/round hooks.
-- v4 is maintained in a separate source branch; the v3 tag and maintenance branch remain available.
-- All participants in a protocol session must migrate together.
+- Every protocol run requires a fresh positive `Parameters.SetSessionNonce` value agreed by all parties. `Party.Start()` fails before preparation when the nonce is absent or invalid.
+- Legacy zero/message-derived session fallbacks have been removed.
+- The Go module and internal import path changed from `github.com/AnvoIO/tss-lib/v3` to `github.com/AnvoIO/tss-lib/v4`; integrations must update their imports.
+- Peer contexts and parameter identities are deep snapshots; `SetIDs` was removed and identity accessors return copies.
+- The public `Party` interface no longer exposes low-level validation/storage/round hooks; deliver through `Update` or `UpdateFromBytes`.
+- No protobuf wire fields changed from v3.1, but every participant must coordinate the required nonce and migrate together.
 
 ### v2.0: Paillier preparams
 
@@ -252,9 +283,9 @@ tss-lib/
 
 ## Security audits
 
-**Stratovera LLC (July 2026)** -- Resharing-continuity and protocol-logic audit. A multi-agent review of the resharing continuity invariants and the protocol-logic bug class (wrong indices, no-op consistency checks, unaborted proof failures, mis-attributed aborts) across ECDSA/EdDSA keygen, signing, and resharing, with adversarial verification of every candidate. Fixed a resharing-continuity authentication bypass (`SRC-2026-1155`) and a resharing Paillier/`NTilde` modulus-size gap, ported the upstream dual-committee resharing fix (`bnb-chain/tss-lib#128`) to EdDSA, corrected abort attribution in several paths, and added defense-in-depth guards. Released in v3.0.2. Documented in [Appendix C](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update) of the report below.
+**Stratovera LLC (July 2026)** -- Resharing-continuity and protocol-logic audit. A review of the resharing continuity invariants and the protocol-logic bug class (wrong indices, no-op consistency checks, unaborted proof failures, mis-attributed aborts) across ECDSA/EdDSA keygen, signing, and resharing, with adversarial verification of every candidate. Fixed a resharing-continuity authentication bypass (`SRC-2026-1155`) and a resharing Paillier/`NTilde` modulus-size gap, ported the upstream dual-committee resharing fix (`bnb-chain/tss-lib#128`) to EdDSA, corrected abort attribution in several paths, and added defense-in-depth guards. Released in v3.0.2. Documented in [Appendix C](./security/2026-02-24-tss-lib-full-audit.md#appendix-c-july-2026-resharing-continuity-and-protocol-logic-update) of the report below.
 
-**Stratovera LLC (June 2026)** -- Follow-up boundary-validation audit, cross-referencing upstream advisories (`SRC-2026-573`, `SRC-2026-644`) against this fork and running a multi-agent review of adversarial input validation at every protocol message boundary. Fixed a remote denial-of-service (nil-pointer dereference on an off-curve point in EdDSA signing) and non-canonical EC point acceptance, plus six defense-in-depth / canonicality hardenings (`J1`–`J8`); no further exploitable vulnerability was found. Released in v3.0.1. Documented in [Appendix B](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation) of the report below.
+**Stratovera LLC (June 2026)** -- Follow-up boundary-validation audit, cross-referencing upstream advisories (`SRC-2026-573`, `SRC-2026-644`) against this fork and reviewing adversarial input validation at every protocol message boundary. Fixed a remote denial-of-service (nil-pointer dereference on an off-curve point in EdDSA signing) and non-canonical EC point acceptance, plus six defense-in-depth / canonicality hardenings (`J1`–`J8`); no further exploitable vulnerability was found. Released in v3.0.1. Documented in [Appendix B](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation) of the report below.
 
 **Stratovera LLC (February 2026)** -- Full-scope audit of the ECDSA/EdDSA threshold signature implementation, covering keygen, signing, resharing, and all supporting cryptographic primitives. Identified 13 findings (2 critical, 3 high, 5 medium, 3 low). All findings have been addressed. The full report is available at [`security/2026-02-24-tss-lib-full-audit.md`](./security/2026-02-24-tss-lib-full-audit.md).
 

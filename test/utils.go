@@ -7,12 +7,12 @@
 package test
 
 import (
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func SharedPartyUpdater(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
 	// do not send a message from this party back to itself
-	if party.PartyID() == msg.GetFrom() {
+	if party.PartyID().KeyInt().Cmp(msg.GetFrom().KeyInt()) == 0 {
 		return
 	}
 	bz, _, err := msg.WireBytes()

@@ -24,6 +24,8 @@ The review included the existing audit report, recent security regression tests,
 | R10 | Random-byte acquisition accepted successful short reads. | Partially uninitialized/deterministic output with a nonstandard reader. | Switched to `io.ReadFull`. |
 | R11 | Validation and wire-parse errors could format themselves by reading mutable round state without the party mutex. | Data race in error-only scheduling metadata; possible undefined behavior under concurrent delivery. | Validation is serialized with round advancement; `WrapError` uses a separately synchronized immutable round-context snapshot, so pre-parse errors never dereference live round state. |
 | R12 | An error could wipe temporary state and then allow an already-queued update to continue on that wiped party. | Session corruption, secondary failures, and inconsistent abort behavior. | Added explicit created/running/finished/aborted lifecycle states; fatal errors terminalize before cleanup and queued updates return the same terminal error. |
+| R13 | `PeerContext`, `IDs()`, and `Parameters.PartyID()` retained or returned mutable identity aliases after constructor validation. | Application-side mutation could invalidate membership/routing assumptions or race protocol reads. | Staged: v3.1 documents identities as immutable; v4 deep-snapshots constructor inputs, returns deep copies, and removes `SetIDs`. |
+| R14 | The public `Party` interface exposed low-level `ValidateMessage`, `StoreMessage`, and round hooks that bypass serialized update semantics. | Direct concurrent use could race protocol state despite safe normal entry points. | Staged: v3.1 documents these hooks as non-concurrent; v4 removes them from the public interface and keeps them implementation-only. |
 | M1 | Go 1.23 was unsupported; CI downloaded ARM Go with unchecked `curl | tar`; workflows targeted `main` while the repository uses `master`. | Missing security patches and ineffective/supply-chain-weak CI. | Go 1.25 minimum, 1.25/1.26 matrix, official pinned setup actions, correct branch. |
 | M2 | Dependencies and protobuf/crypto modules were stale; no automated reachable-vulnerability gate existed. | Delayed security updates. | Direct dependencies updated, `govulncheck` pinned as a Go tool, CI and Dependabot added. |
 | G1 | Security reporting, merge controls, and solo-maintainer review expectations were undocumented. | Inconsistent disclosure and review; tool review could be mistaken for human approval. | Added `SECURITY.md`, `GOVERNANCE.md`, and a PR security/review template. |
@@ -72,17 +74,18 @@ byte inputs does not by itself explore concurrent schedules.
 - Invalid contexts, oversized messages, and oversized proofs that were previously accepted are rejected.
 - The minimum supported Go release is 1.25.
 
-The follow-on v4 branch makes the nonce requirement mandatory and changes the Go module/import path to `/v4`; that branch requires coordinated downstream migration.
+The follow-on v4 branch makes the nonce requirement mandatory, changes the Go module/import path to `/v4`, freezes identity/context aliases, and narrows the public `Party` interface; that branch requires coordinated downstream migration. Its protobuf wire encoding remains unchanged from v3.1.
 
 ## Residual risks and manual actions
 
 1. No second human cryptographer reviewed this change set. Fresh-context review records are supporting evidence, not an independent professional audit.
 2. GG18/GG20-family protocols have complex malicious-security and identifiable-abort assumptions. This review is source-level assurance, not a new formal proof.
 3. The legacy EdDSA numeric constructor remains for compatibility and is inherently ambiguous without an explicit byte length; downstream code should prohibit it.
-4. GitHub-hosted rulesets, private vulnerability reporting, secret scanning, push protection, and tag protection must be enabled manually as listed in `GOVERNANCE.md`.
-5. Applications still own peer authentication, reliable broadcast, replay storage, timeouts, crash recovery, and secure key-share storage.
-6. The 4 MiB global ceiling is defense in depth, not a substitute for smaller message-type and transport limits. Revisit it if protocol sizes or party counts grow.
-7. Old foundational EdDSA/logging dependencies remain because replacing them is a larger compatibility project. Continue isolating them and plan a separately reviewed migration.
+4. v3 identity/context values remain reference-backed for compatibility and must never be mutated after parameter construction; v4 replaces these aliases with defensive snapshots.
+5. GitHub-hosted rulesets, private vulnerability reporting, secret scanning, push protection, and tag protection must be enabled manually as listed in `GOVERNANCE.md`.
+6. Applications still own peer authentication, reliable broadcast, replay storage, timeouts, crash recovery, and secure key-share storage.
+7. The 4 MiB global ceiling is defense in depth, not a substitute for smaller message-type and transport limits. Revisit it if protocol sizes or party counts grow.
+8. Old foundational EdDSA/logging dependencies remain because replacing them is a larger compatibility project. Continue isolating them and plan a separately reviewed migration.
 
 ## Recommended release process
 

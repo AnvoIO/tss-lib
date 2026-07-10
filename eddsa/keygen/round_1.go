@@ -11,11 +11,11 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	cmts "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	cmts "github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 var zero = big.NewInt(0)
@@ -38,11 +38,7 @@ func (round *round1) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
-	if nonce := round.Params().SessionNonce(); nonce != nil {
-		round.temp.ssidNonce = nonce
-	} else {
-		round.temp.ssidNonce = new(big.Int)
-	}
+	round.temp.ssidNonce = round.Params().SessionNonce()
 	ssid, err := round.getSSID()
 	if err != nil {
 		return round.WrapError(err)

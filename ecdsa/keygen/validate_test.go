@@ -11,7 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
 )
 
 func TestValidateBasic_KGRound2Message1(t *testing.T) {

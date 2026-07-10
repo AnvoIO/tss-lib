@@ -11,12 +11,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
-	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/eddsa/signing"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/eddsa/signing"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // round 1 represents round 1 of the keygen part of the EDDSA TSS spec

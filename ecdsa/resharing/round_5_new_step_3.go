@@ -10,8 +10,8 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func (round *round5) Start() *tss.Error {

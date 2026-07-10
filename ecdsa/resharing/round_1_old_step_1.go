@@ -10,14 +10,13 @@ package resharing
 import (
 	"errors"
 	"fmt"
-	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/signing"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/signing"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // round 1 represents round 1 of the keygen part of the GG18 ECDSA TSS spec (Gennaro, Goldfeder; 2018)
@@ -47,11 +46,7 @@ func (round *round1) Start() *tss.Error {
 		round.allOldOK()
 	}
 
-	if nonce := round.Params().SessionNonce(); nonce != nil {
-		round.temp.ssidNonce = nonce
-	} else {
-		round.temp.ssidNonce = new(big.Int)
-	}
+	round.temp.ssidNonce = round.Params().SessionNonce()
 	ssid, err := round.getSSID()
 	if err != nil {
 		return round.WrapError(err)

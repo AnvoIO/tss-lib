@@ -14,10 +14,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	. "github.com/AnvoIO/tss-lib/v3/crypto/schnorr"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	. "github.com/AnvoIO/tss-lib/v4/crypto/schnorr"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 var Session = []byte("session")

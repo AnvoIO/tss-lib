@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
 )
 
 func TestClear_Keygen_ZerosSecretMaterial(t *testing.T) {

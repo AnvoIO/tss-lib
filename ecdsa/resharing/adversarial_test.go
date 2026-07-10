@@ -17,11 +17,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
-	. "github.com/AnvoIO/tss-lib/v3/ecdsa/resharing"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
+	. "github.com/AnvoIO/tss-lib/v4/ecdsa/resharing"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func tamperResharingAnyField(wireBytes []byte, targetMsgType string, tamperFn func([]byte) []byte) []byte {
@@ -363,7 +363,7 @@ func TestAdversarial_Resharing_MultipleCorruptedSharesReportsMultipleCulprits(t 
 	}
 
 	updater := func(party tss.Party, msg tss.Message, errCh chan<- *tss.Error) {
-		if party.PartyID() == msg.GetFrom() {
+		if party.PartyID().KeyInt().Cmp(msg.GetFrom().KeyInt()) == 0 {
 			return
 		}
 		bz, _, err := msg.WireBytes()

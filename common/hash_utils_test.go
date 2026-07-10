@@ -12,7 +12,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v4/common"
 )
 
 // TestRejectionSample_DoesNotMutateInput is a defense-in-depth regression test:

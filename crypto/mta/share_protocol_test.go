@@ -16,11 +16,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // Using a modulus length of 2048 is recommended in the GG18 spec

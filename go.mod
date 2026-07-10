@@ -1,4 +1,4 @@
-module github.com/AnvoIO/tss-lib/v3
+module github.com/AnvoIO/tss-lib/v4
 
 go 1.25.0
 

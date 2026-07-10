@@ -10,13 +10,12 @@ package signing
 import (
 	"errors"
 	"fmt"
-	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // round 1 represents round 1 of the signing part of the EDDSA TSS spec
@@ -35,11 +34,7 @@ func (round *round1) Start() *tss.Error {
 	round.started = true
 	round.resetOK()
 
-	if nonce := round.Params().SessionNonce(); nonce != nil {
-		round.temp.ssidNonce = nonce
-	} else {
-		round.temp.ssidNonce = new(big.Int).SetBytes(round.temp.message)
-	}
+	round.temp.ssidNonce = round.Params().SessionNonce()
 	var err error
 	round.temp.ssid, err = round.getSSID()
 	if err != nil {

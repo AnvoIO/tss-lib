@@ -13,7 +13,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
 )
 
 var dlnTestSession = []byte("dln-test-session")

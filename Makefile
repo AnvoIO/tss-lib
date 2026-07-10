@@ -1,9 +1,9 @@
-MODULE = github.com/AnvoIO/tss-lib/v3
+MODULE = github.com/AnvoIO/tss-lib/v4
 PACKAGES = $(shell go list ./... | grep -v '/vendor/')
 SIGNING_PACKAGES = ./ecdsa/signing ./eddsa/signing
 SIGNING_RACE_REGEX = TestE2E_(SignZeroMessage|SignMaxMessage|ReSignSameKey)|TestE2E_EdDSA_(SignZeroMessage|SignMaxMessage|ReSignSameKey)|TestUpdateRejectsOutsiderWithoutClearingSensitiveData|TestE2EConcurrent(InvalidSender|MalformedWire)Validation
 LIFECYCLE_RACE_PACKAGES = ./tss ./eddsa/signing
-LIFECYCLE_RACE_REGEX = TestFatalUpdateTerminalizesBeforeQueuedUpdateRuns|TestE2EConcurrent(InvalidSender|MalformedWire)Validation
+LIFECYCLE_RACE_REGEX = TestFatalUpdateTerminalizesBeforeQueuedUpdateRuns|TestParameterIdentitySnapshotsAreRaceSafe|TestE2EConcurrent(InvalidSender|MalformedWire)Validation
 
 all: protob test
 

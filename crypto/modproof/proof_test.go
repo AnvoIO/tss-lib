@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	. "github.com/AnvoIO/tss-lib/v3/crypto/modproof"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	. "github.com/AnvoIO/tss-lib/v4/crypto/modproof"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
 	"github.com/stretchr/testify/assert"
 )
 

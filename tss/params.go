@@ -26,9 +26,8 @@ type (
 		threshold           int
 		concurrency         int
 		safePrimeGenTimeout time.Duration
-		// sessionNonce provides per-session SSID uniqueness. It remains optional
-		// for v3 compatibility, but callers should always set a fresh positive
-		// value; v4 makes this mandatory.
+		// sessionNonce provides per-session SSID uniqueness and must be a fresh
+		// positive value agreed by all parties before Start.
 		sessionNonce *big.Int
 		// for keygen
 		noProofMod bool
@@ -94,8 +93,8 @@ func newParameters(ec elliptic.Curve, ctx *PeerContext, partyID *PartyID, partyC
 	}
 	return &Parameters{
 		ec:                  ec,
-		parties:             ctx,
-		partyID:             partyID,
+		parties:             NewPeerContext(ctx.IDs()),
+		partyID:             clonePartyID(partyID),
 		partyCount:          partyCount,
 		threshold:           threshold,
 		concurrency:         runtime.GOMAXPROCS(0),
@@ -153,8 +152,9 @@ func (params *Parameters) Parties() *PeerContext {
 	return params.parties
 }
 
+// PartyID returns a deep copy of the local identity.
 func (params *Parameters) PartyID() *PartyID {
-	return params.partyID
+	return clonePartyID(params.partyID)
 }
 
 func (params *Parameters) PartyCount() int {
@@ -209,8 +209,8 @@ func (params *Parameters) SetRand(rand io.Reader) {
 	params.rand = rand
 }
 
-// SessionNonce returns the per-session nonce for SSID uniqueness.
-// Returns nil if not set.
+// SessionNonce returns a copy of the required per-session nonce used for SSID
+// uniqueness. Party.Start rejects nil, zero, and negative nonces.
 func (params *Parameters) SessionNonce() *big.Int {
 	if params.sessionNonce == nil {
 		return nil
@@ -218,10 +218,11 @@ func (params *Parameters) SessionNonce() *big.Int {
 	return new(big.Int).Set(params.sessionNonce)
 }
 
-// SetSessionNonce sets a per-session nonce that all parties must agree on.
+// SetSessionNonce sets a required per-session nonce that all parties must agree on.
 // This value is mixed into the SSID to provide GG20 session binding, preventing
 // cross-session proof replay attacks. All parties in the same session MUST use
-// the same nonce value. The caller is responsible for coordinating this.
+// the same fresh positive nonce value. The caller is responsible for coordinating
+// it and MUST NOT reuse it across protocol runs.
 func (params *Parameters) SetSessionNonce(nonce *big.Int) {
 	if nonce == nil {
 		params.sessionNonce = nil
@@ -251,6 +252,7 @@ func NewReSharingParameters(ec elliptic.Curve, ctx, newCtx *PeerContext, partyID
 	if newCtx == nil {
 		return nil, fmt.Errorf("NewReSharingParameters: new peer context must not be nil")
 	}
+	frozenNewCtx := NewPeerContext(newCtx.IDs())
 	if newPartyCount < 1 {
 		return nil, fmt.Errorf("NewReSharingParameters: newPartyCount must be >= 1, got %d", newPartyCount)
 	}
@@ -260,20 +262,20 @@ func NewReSharingParameters(ec elliptic.Curve, ctx, newCtx *PeerContext, partyID
 	if newThreshold >= newPartyCount {
 		return nil, fmt.Errorf("NewReSharingParameters: newThreshold must be < newPartyCount, got newThreshold=%d newPartyCount=%d", newThreshold, newPartyCount)
 	}
-	if err := validatePeerContext(newCtx, newPartyCount); err != nil {
+	if err := validatePeerContext(frozenNewCtx, newPartyCount); err != nil {
 		return nil, fmt.Errorf("NewReSharingParameters: invalid new peer context: %w", err)
 	}
-	if err := validatePartyKeysForCurve(ec, newCtx); err != nil {
+	if err := validatePartyKeysForCurve(ec, frozenNewCtx); err != nil {
 		return nil, fmt.Errorf("NewReSharingParameters: invalid new peer context: %w", err)
 	}
-	_, isOld := ctx.IDs().IndexOf(partyID)
-	_, isNew := newCtx.IDs().IndexOf(partyID)
+	_, isOld := params.Parties().IDs().IndexOf(params.PartyID())
+	_, isNew := frozenNewCtx.IDs().IndexOf(params.PartyID())
 	if !isOld && !isNew {
 		return nil, fmt.Errorf("NewReSharingParameters: partyID is not a member of either committee")
 	}
 	return &ReSharingParameters{
 		Parameters:    params,
-		newParties:    newCtx,
+		newParties:    frozenNewCtx,
 		newPartyCount: newPartyCount,
 		newThreshold:  newThreshold,
 	}, nil

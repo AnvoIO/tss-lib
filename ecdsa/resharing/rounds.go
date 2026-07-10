@@ -10,10 +10,10 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 const (
@@ -88,22 +88,22 @@ func (round *base) CanProceed() bool {
 func (round *base) WaitingFor() []*tss.PartyID {
 	oldPs := round.OldParties().IDs()
 	newPs := round.NewParties().IDs()
-	idsMap := make(map[*tss.PartyID]bool)
+	idsMap := make(map[string]*tss.PartyID)
 	ids := make([]*tss.PartyID, 0, len(round.oldOK))
 	for j, ok := range round.oldOK {
 		if ok {
 			continue
 		}
-		idsMap[oldPs[j]] = true
+		idsMap[oldPs[j].KeyInt().String()] = oldPs[j]
 	}
 	for j, ok := range round.newOK {
 		if ok {
 			continue
 		}
-		idsMap[newPs[j]] = true
+		idsMap[newPs[j].KeyInt().String()] = newPs[j]
 	}
 	// consolidate into the list
-	for id := range idsMap {
+	for _, id := range idsMap {
 		ids = append(ids, id)
 	}
 	return ids

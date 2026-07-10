@@ -20,7 +20,7 @@ Applications must provide:
 
 - authenticated and confidential point-to-point transport;
 - reliable broadcast or transcript hash comparison;
-- a fresh positive session nonce, agreed by every party, for every keygen, signing, and resharing run;
+- a fresh positive session nonce, agreed by every party, for every keygen, signing, and resharing run (`Party.Start()` enforces that one is set);
 - replay protection and durable session-state tracking;
 - protocol timeouts and safe abort handling;
 - protected storage and access control for key shares and Paillier pre-parameters.

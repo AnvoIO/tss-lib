@@ -10,11 +10,11 @@ import (
 	"crypto/elliptic"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	cmt "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/schnorr"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	cmt "github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/schnorr"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // These messages were generated from Protocol Buffers definitions into eddsa-signing.pb.go

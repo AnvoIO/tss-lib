@@ -12,10 +12,10 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	cmt "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	cmt "github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // Implements Party

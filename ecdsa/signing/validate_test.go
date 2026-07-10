@@ -11,8 +11,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/mta"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/crypto/mta"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func TestUnmarshalRangeProofAlice_WrongPartCount(t *testing.T) {

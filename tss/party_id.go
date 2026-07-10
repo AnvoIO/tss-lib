@@ -12,7 +12,7 @@ import (
 	"math/big"
 	"sort"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v4/common"
 )
 
 type (
@@ -58,6 +58,29 @@ func NewPartyID(id, moniker string, key *big.Int) *PartyID {
 
 func (pid PartyID) String() string {
 	return fmt.Sprintf("{%d,%s}", pid.Index, pid.Moniker)
+}
+
+func clonePartyID(pid *PartyID) *PartyID {
+	if pid == nil {
+		return nil
+	}
+	cloned := &PartyID{Index: pid.Index}
+	if pid.MessageWrapper_PartyID != nil {
+		cloned.MessageWrapper_PartyID = &MessageWrapper_PartyID{
+			Id:      pid.Id,
+			Moniker: pid.Moniker,
+			Key:     append([]byte(nil), pid.Key...),
+		}
+	}
+	return cloned
+}
+
+func clonePartyIDs(ids SortedPartyIDs) SortedPartyIDs {
+	cloned := make(SortedPartyIDs, len(ids))
+	for i, id := range ids {
+		cloned[i] = clonePartyID(id)
+	}
+	return cloned
 }
 
 // ----- //
