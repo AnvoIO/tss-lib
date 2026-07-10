@@ -13,6 +13,24 @@ A Go implementation of multi-party {t,n}-threshold ECDSA and EdDSA signature sch
 
 Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security hardening, constant-time arithmetic, session-bound Fiat-Shamir challenges, VSS correctness fixes, and adversarial input-validation hardening at protocol message boundaries.
 
+## Release line
+
+This source tree is the wire-compatible v3 maintenance line:
+
+- Go module: `github.com/AnvoIO/tss-lib/v3`
+- Release branch: `release/v3.1.0`
+- Current release: `v3.1.0`
+
+The breaking v4 API is released independently from its own branch and tag using
+module path `github.com/AnvoIO/tss-lib/v4`. It is not bundled into this source
+tree. Releasing v4 does not delete, replace, or invalidate tagged v3 source;
+future compatible v3 security fixes can continue from the v3 maintenance branch.
+
+Choose the major version through the Go import path. Do not mix v3 and v4
+participants in one keygen, signing, or resharing session. v3.1 preserves the v3
+protobuf/wire format and legacy nonce fallback; applications should nevertheless
+set a fresh positive session nonce for every run before migrating to v4.
+
 ## Features
 
 - **ECDSA threshold signatures** -- {t,n}-threshold signing on secp256k1 and other curves
@@ -147,6 +165,17 @@ Inbound transports should reject messages above 4 MiB before buffering; `ParseWi
 
 ## Releases
 
+### v3.1.0: wire-compatible security and maintenance release
+
+This release preserves the v3 protobuf/wire format and existing session fallback
+while adding protocol-boundary validation, committee-local sender binding,
+terminal party lifecycle handling, malformed-wire and queued-abort race
+regressions, dependency maintenance, and repository governance controls.
+`Parameters.SetSessionNonce` remains optional for v3 compatibility but a fresh
+positive value agreed by every participant is strongly recommended. See the
+[`CHANGELOG`](./CHANGELOG.md) and
+[`security review`](./security/2026-07-10-security-maintenance-review.md).
+
 ### v3.0.2: July 2026 resharing-continuity and protocol-logic update (non-breaking)
 
 Security patch. No breaking API or wire-format changes — interoperable with honest
@@ -172,10 +201,15 @@ boundary-validation audit. See the [`CHANGELOG`](./CHANGELOG.md) and
 
 ## Breaking changes
 
-### Planned v4: mandatory sessions
+### v4.0: separate breaking release
 
-- Every protocol run will require a fresh positive `Parameters.SetSessionNonce` value agreed by all parties.
-- The Go module and internal import path will change from `/v3` to `/v4`.
+- Every protocol run requires a fresh positive `Parameters.SetSessionNonce` value agreed by all parties.
+- The Go module and internal import path changes from `/v3` to `/v4`.
+- Legacy zero/message-derived session fallbacks are removed.
+- Peer contexts and parameter identities become defensive snapshots.
+- The public `Party` interface no longer exposes low-level validation/storage/round hooks.
+- v4 is maintained in a separate source branch; the v3 tag and maintenance branch remain available.
+- All participants in a protocol session must migrate together.
 
 ### v2.0: Paillier preparams
 
