@@ -158,6 +158,11 @@ hooks; application code should not type-assert and call them directly.
 `PeerContext.IDs()` / `Parameters.PartyID()` return deep copies. Compare party
 keys (or use `SortedPartyIDs.IndexOf`), never `*PartyID` pointer addresses.
 
+`PeerContext.IDs()` allocates a deep copy on each call; applications targeting
+very large committees should take one snapshot outside hot loops and reuse it
+within that operation. The copy preserves sorted order and committee-local index
+correspondence.
+
 ## How to use this securely
 
 The transport layer is your responsibility. You must provide:

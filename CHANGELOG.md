@@ -3,9 +3,9 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v4.0.0] - Unreleased
+## [Unreleased]
 
-Breaking security release layered on v3.1.0.
+Planned v4.0.0 breaking security release layered on v3.1.0.
 
 ### Changed (breaking)
 
@@ -15,6 +15,13 @@ Breaking security release layered on v3.1.0.
 - Make `PeerContext` take a deep identity snapshot, make `PeerContext.IDs()` and `Parameters.PartyID()` return deep copies, and remove `PeerContext.SetIDs`; validated committee membership and routing keys can no longer be changed through retained aliases.
 - Narrow the public `Party` interface to serialized lifecycle, update, status, identity, and error operations. Low-level `ValidateMessage`, `StoreMessage`, and `FirstRound` hooks remain implementation details rather than concurrency-safe application entry points.
 - Use party keys rather than pointer identity where committee snapshots must recognize the same participant.
+
+### Performance note
+
+`PeerContext.IDs()` intentionally returns a deep copy on every call. For very
+large committees, take one snapshot outside hot loops and reuse that snapshot
+within the operation. Cloning preserves sorted order and committee-local index
+correspondence.
 
 ### Migration
 

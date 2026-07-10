@@ -17,12 +17,12 @@ For a high-risk change:
 1. State the security invariant and threat model in the PR.
 2. Add an adversarial regression that fails before the fix, including concurrent honest/adversarial interleavings when the affected path supports concurrent use.
 3. Run the full required checks from the PR template.
-4. Obtain a fresh-context review of the final diff. Codex, Claude, or another review tool may be used when no human reviewer is available.
-5. Record the tool/model, date, commit SHA, scope, findings, and disposition in the PR. Preserve disagreements rather than averaging them away.
+4. Obtain a fresh-context review of the final diff when no second human reviewer is available.
+5. Record the date, commit SHA, scope, findings, and disposition in the PR. Preserve disagreements rather than averaging them away. Do not add review-tool attribution to source files, commit metadata, PR descriptions, release notes, or tags.
 6. Re-run review if the reviewed diff changes materially.
 7. Merge only the reviewed commit after required CI checks pass.
 
-Tool output must not be represented as human approval or an independent professional cryptographic audit. A review that cannot be turned into a test, invariant, or documented rationale remains an open risk.
+Review output must not be represented as human approval or an independent professional cryptographic audit. A review that cannot be turned into a test, invariant, or documented rationale remains an open risk.
 
 ## Repository settings to configure on GitHub
 
