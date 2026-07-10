@@ -16,6 +16,7 @@ Planned v3.1.0 security and maintenance hardening. Existing valid v3 integration
 - Made session nonce values immutable across the API boundary and added explicit positive-value validation for callers preparing for v4.
 - Added byte-preserving EdDSA signing via `NewLocalPartyWithBytes` and made invalid legacy lengths return errors rather than panic.
 - Zero temporary secret material after protocol aborts as well as successful completion; resharing copies persisted output before cleanup.
+- Serialized message validation with round advancement and kept error-triggered secret wiping under the party mutex, closing concurrency races without allowing rejected messages to destroy a live session.
 - Added nil-safe MtA proof and VSS share verification guards.
 
 ### Maintenance and governance

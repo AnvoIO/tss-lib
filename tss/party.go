@@ -158,17 +158,20 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error)
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
 func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
-	// fast-fail on an invalid message; do not lock the mutex yet
+	p.lock()
+	// Validation can format errors with the current round, so it must be
+	// serialized with round advancement. Rejected messages do not mutate party
+	// state and therefore must not trigger sensitive-data cleanup.
 	if _, err := p.ValidateMessage(msg); err != nil {
+		p.unlock()
 		return false, err
 	}
-	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
+	// Need this unlock hook because the round-advance path recurses below.
 	r := func(ok bool, err *Error) (bool, *Error) {
 		clearSensitiveDataOnError(p, err)
 		p.unlock()
 		return ok, err
 	}
-	p.lock() // data is written to P state below
 	common.Logger.Debugf("party %s received message: %s", p.PartyID(), msg.String())
 	if p.round() != nil {
 		common.Logger.Debugf("party %s round %d update: %s", p.PartyID(), p.round().RoundNumber(), msg.String())

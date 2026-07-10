@@ -22,8 +22,13 @@ import (
 	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
+type invalidUpdateResult struct {
+	ok  bool
+	err *tss.Error
+}
+
 // runEdDSASigningE2E runs a full EdDSA signing protocol and returns the parties and signature data.
-func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySaveData, signPIDs tss.SortedPartyIDs) ([]*LocalParty, *common.SignatureData) {
+func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySaveData, signPIDs tss.SortedPartyIDs, injectInvalidSender ...bool) ([]*LocalParty, *common.SignatureData) {
 	t.Helper()
 
 	p2pCtx := tss.NewPeerContext(signPIDs)
@@ -32,6 +37,30 @@ func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySave
 	errCh := make(chan *tss.Error, len(signPIDs))
 	outCh := make(chan tss.Message, len(signPIDs))
 	endCh := make(chan *common.SignatureData, len(signPIDs))
+
+	injectInvalid := len(injectInvalidSender) > 0 && injectInvalidSender[0]
+	invalidResults := make(chan invalidUpdateResult, 256)
+	var invalidWG sync.WaitGroup
+	var invalidMessage tss.ParsedMessage
+	if injectInvalid {
+		outsider := tss.NewPartyID("outsider", "outsider", big.NewInt(999999999))
+		outsider.Index = 0
+		_, isMember := signPIDs.IndexOf(outsider)
+		require.False(t, isMember)
+		invalidMessage = NewSignRound1Message(outsider, big.NewInt(1))
+	}
+
+	injectFor := func(party *LocalParty) {
+		if !injectInvalid {
+			return
+		}
+		invalidWG.Add(1)
+		go func() {
+			defer invalidWG.Done()
+			ok, updateErr := party.Update(invalidMessage)
+			invalidResults <- invalidUpdateResult{ok: ok, err: updateErr}
+		}()
+	}
 
 	updater := test.SharedPartyUpdater
 	for i := 0; i < len(signPIDs); i++ {
@@ -63,13 +92,16 @@ signing:
 					if P.PartyID().Index == msg.GetFrom().Index {
 						continue
 					}
+					injectFor(P)
 					go updater(P, msg, errCh)
 				}
 			} else {
 				if dest[0].Index == msg.GetFrom().Index {
 					t.Fatalf("party %d tried to send a message to itself (%d)", dest[0].Index, msg.GetFrom().Index)
 				}
-				go updater(parties[dest[0].Index], msg, errCh)
+				target := parties[dest[0].Index]
+				injectFor(target)
+				go updater(target, msg, errCh)
 			}
 
 		case sigData := <-endCh:
@@ -80,6 +112,14 @@ signing:
 			if atomic.LoadInt32(&ended) == int32(len(signPIDs)) {
 				break signing
 			}
+		}
+	}
+	if injectInvalid {
+		invalidWG.Wait()
+		close(invalidResults)
+		for invalidResult := range invalidResults {
+			require.False(t, invalidResult.ok)
+			require.ErrorContains(t, invalidResult.err, "message sender is not a committee member")
 		}
 	}
 	return parties, result
@@ -140,6 +180,16 @@ func TestUpdateRejectsOutsiderWithoutClearingSensitiveData(t *testing.T) {
 	require.Equal(t, wiBefore, party.temp.wi)
 	require.Equal(t, riBefore, party.temp.ri)
 	require.Equal(t, messageBefore, party.temp.message)
+}
+
+func TestE2EConcurrentInvalidSenderValidation(t *testing.T) {
+	setUp("info")
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	require.NoError(t, err)
+
+	_, sigData := runEdDSASigningE2E(t, big.NewInt(200), keys, signPIDs, true)
+	require.NotNil(t, sigData)
+	assert.NotEmpty(t, sigData.Signature)
 }
 
 func TestE2E_EdDSA_SignZeroMessage(t *testing.T) {
