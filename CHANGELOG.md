@@ -12,11 +12,18 @@ Breaking security release layered on v3.1.0.
 - Require every keygen, signing, and resharing `Party.Start()` call to have a fresh positive `Parameters.SetSessionNonce` value agreed by all participants. Validation occurs before protocol preparation or round execution.
 - Remove the legacy zero and message-derived session nonce fallbacks.
 - Change the Go module and internal import path from `github.com/AnvoIO/tss-lib/v3` to `github.com/AnvoIO/tss-lib/v4`.
+- Make `PeerContext` take a deep identity snapshot, make `PeerContext.IDs()` and `Parameters.PartyID()` return deep copies, and remove `PeerContext.SetIDs`; validated committee membership and routing keys can no longer be changed through retained aliases.
+- Narrow the public `Party` interface to serialized lifecycle, update, status, identity, and error operations. Low-level `ValidateMessage`, `StoreMessage`, and `FirstRound` hooks remain implementation details rather than concurrency-safe application entry points.
+- Use party keys rather than pointer identity where committee snapshots must recognize the same participant.
 
 ### Migration
 
 - Update imports to `github.com/AnvoIO/tss-lib/v4/...`.
 - Coordinate a unique positive nonce out of band for each protocol run and call `params.SetSessionNonce(nonce)` before `Party.Start()` on every participant.
+- Replace any `PeerContext.SetIDs` use by constructing a new context. Treat values returned by `IDs()` and `PartyID()` as snapshots; mutating them no longer updates parameters.
+- Route inbound messages only through `Party.Update` or `Party.UpdateFromBytes`; code using removed low-level `Party` interface methods must migrate.
+- Do not compare `*PartyID` pointers for identity. Compare keys or use `SortedPartyIDs.IndexOf`.
+- Protobuf wire encoding is unchanged from v3.1, but the mandatory coordinated session nonce changes transcript acceptance and requires every participant to migrate together.
 
 ## [v3.1.0] - Unreleased
 

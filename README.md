@@ -130,9 +130,14 @@ same party; updates are serialized, valid messages that arrive just before
 are ignored. A fatal protocol error terminalizes the party and clears temporary
 secrets before any queued update can run. `Running`, `WaitingFor`, `String`,
 and `WrapError` are safe status/error helpers during concurrent delivery.
-`ValidateMessage` and `StoreMessage` are low-level hooks and must not be called
-directly from concurrent application code. Treat party IDs and peer contexts as
-immutable after constructing parameters.
+
+The public `Party` interface exposes only serialized update/lifecycle operations
+and concurrency-safe status/error helpers. Concrete protocol types retain
+`ValidateMessage`, `StoreMessage`, and `FirstRound` solely as implementation
+hooks; application code should not type-assert and call them directly.
+`NewPeerContext` and parameter constructors take deep identity snapshots, and
+`PeerContext.IDs()` / `Parameters.PartyID()` return deep copies. Compare party
+keys (or use `SortedPartyIDs.IndexOf`), never `*PartyID` pointer addresses.
 
 ## How to use this securely
 
@@ -172,11 +177,14 @@ boundary-validation audit. See the [`CHANGELOG`](./CHANGELOG.md) and
 
 ## Breaking changes
 
-### v4.0: mandatory sessions and module migration
+### v4.0: mandatory sessions, immutable identities, and module migration
 
 - Every protocol run requires a fresh positive `Parameters.SetSessionNonce` value agreed by all parties. `Party.Start()` fails before preparation when the nonce is absent or invalid.
 - Legacy zero/message-derived session fallbacks have been removed.
 - The Go module and internal import path changed from `github.com/AnvoIO/tss-lib/v3` to `github.com/AnvoIO/tss-lib/v4`; integrations must update their imports.
+- Peer contexts and parameter identities are deep snapshots; `SetIDs` was removed and identity accessors return copies.
+- The public `Party` interface no longer exposes low-level validation/storage/round hooks; deliver through `Update` or `UpdateFromBytes`.
+- No protobuf wire fields changed from v3.1, but every participant must coordinate the required nonce and migrate together.
 
 ### v2.0: Paillier preparams
 

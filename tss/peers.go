@@ -12,14 +12,15 @@ type (
 	}
 )
 
+// NewPeerContext takes a deep snapshot of the committee identities.
 func NewPeerContext(parties SortedPartyIDs) *PeerContext {
-	return &PeerContext{partyIDs: parties}
+	return &PeerContext{partyIDs: clonePartyIDs(parties)}
 }
 
+// IDs returns a deep copy. Mutating the result cannot alter this context.
 func (p2pCtx *PeerContext) IDs() SortedPartyIDs {
-	return p2pCtx.partyIDs
-}
-
-func (p2pCtx *PeerContext) SetIDs(ids SortedPartyIDs) {
-	p2pCtx.partyIDs = ids
+	if p2pCtx == nil {
+		return nil
+	}
+	return clonePartyIDs(p2pCtx.partyIDs)
 }
