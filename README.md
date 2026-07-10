@@ -25,7 +25,7 @@ Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security
 
 ## Requirements
 
-- Go 1.23+
+- Go 1.25+
 - Protocol Buffers compiler (for regenerating wire format, not required to build)
 
 ## Building
@@ -67,7 +67,13 @@ params, err := tss.NewParameters(tss.S256(), ctx, thisParty, len(parties), thres
 if err != nil {
     // handle error
 }
+
+// Strongly recommended in v3 and required in v4: use a fresh positive nonce
+// agreed by every participant. Never reuse it across protocol runs.
+params.SetSessionNonce(sessionNonce)
 ```
+
+For v3 compatibility, an unset nonce retains the legacy fallback. This is deprecated: set a fresh coordinated nonce before every keygen, signing, or resharing run so the integration is ready for v4.
 
 ### Key generation
 
@@ -87,6 +93,12 @@ go func() {
     err := party.Start()
     // handle err ...
 }()
+```
+
+For EdDSA, pass the exact message bytes so leading zeros are preserved:
+
+```go
+party := eddsasigning.NewLocalPartyWithBytes(messageBytes, params, ourKeyData, outCh, endCh)
 ```
 
 ### Re-sharing
@@ -114,9 +126,11 @@ WireBytes() ([]byte, *tss.MessageRouting, error)
 The transport layer is your responsibility. You must provide:
 
 - **Broadcast and point-to-point channels** with end-to-end encryption (TLS with AEAD recommended)
-- **Session IDs** unique to each protocol run, agreed upon out-of-band before rounds begin
+- **Session IDs** unique to each protocol run, agreed upon out-of-band before rounds begin; pass the positive value with `SetSessionNonce`
 - **Reliable broadcast** so all parties receive identical messages (hash-and-compare)
 - **Timeouts and error handling** -- use `Party.WaitingFor()` and `*tss.Error` culprit info
+
+Inbound transports should reject messages above 4 MiB before buffering; `ParseWireMessage` enforces the same ceiling as defense in depth.
 
 ## Releases
 
@@ -144,6 +158,11 @@ boundary-validation audit. See the [`CHANGELOG`](./CHANGELOG.md) and
 [Appendix B of the audit report](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation).
 
 ## Breaking changes
+
+### Planned v4: mandatory sessions
+
+- Every protocol run will require a fresh positive `Parameters.SetSessionNonce` value agreed by all parties.
+- The Go module and internal import path will change from `/v3` to `/v4`.
 
 ### v2.0: Paillier preparams
 

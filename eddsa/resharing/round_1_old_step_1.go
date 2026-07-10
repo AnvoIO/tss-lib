@@ -47,7 +47,10 @@ func (round *round1) Start() *tss.Error {
 	}
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	i, ok := round.ReSharingParams().OldPartyIndex()
+	if !ok {
+		return round.WrapError(errors.New("local party is not in the old committee"), Pi)
+	}
 
 	// 1. PrepareForSigning() -> w_i
 	xi, ks := round.input.Xi, round.input.Ks

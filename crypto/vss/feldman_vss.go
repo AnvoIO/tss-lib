@@ -94,8 +94,15 @@ func Create(ec elliptic.Curve, threshold int, secret *big.Int, indexes []*big.In
 }
 
 func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
-	if share.Threshold != threshold || vs == nil || len(vs) != threshold+1 {
+	if share == nil || ec == nil || ec.Params() == nil || share.ID == nil ||
+		share.ID.Sign() <= 0 || share.Threshold != threshold || threshold < 0 ||
+		vs == nil || len(vs) != threshold+1 {
 		return false
+	}
+	for _, point := range vs {
+		if point == nil {
+			return false
+		}
 	}
 	// reject non-canonical share scalar (must be in [0, q)) so a peer cannot
 	// pass verification with a value congruent to the real share modulo q.

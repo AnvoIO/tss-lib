@@ -35,7 +35,10 @@ func (round *round4) Start() *tss.Error {
 	}
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	i, ok := round.ReSharingParams().NewPartyIndex()
+	if !ok {
+		return round.WrapError(errors.New("local party is not in the new committee"), Pi)
+	}
 
 	// 1.
 	newXi := big.NewInt(0)

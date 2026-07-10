@@ -155,7 +155,7 @@ func ProofBobWCFromBytes(ec elliptic.Curve, bzs [][]byte) (*ProofBobWC, error) {
 	// ProofBobFromBytes accepts either 10 (ProofBob) or 12 (ProofBobWC) parts;
 	// ProofBobWC additionally reads bzs[10] and bzs[11], so require exactly 12
 	// here rather than trusting the caller to have validated the length.
-	if !common.NonEmptyMultiBytes(bzs, ProofBobWCBytesParts) {
+	if !common.NonEmptyMultiBytesBounded(bzs, MaxProofElementBytes, ProofBobWCBytesParts) {
 		return nil, fmt.Errorf("expected %d byte parts to construct ProofBobWC", ProofBobWCBytesParts)
 	}
 	proofBob, err := ProofBobFromBytes(bzs)
@@ -175,8 +175,8 @@ func ProofBobWCFromBytes(ec elliptic.Curve, bzs [][]byte) (*ProofBobWC, error) {
 }
 
 func ProofBobFromBytes(bzs [][]byte) (*ProofBob, error) {
-	if !common.NonEmptyMultiBytes(bzs, ProofBobBytesParts) &&
-		!common.NonEmptyMultiBytes(bzs, ProofBobWCBytesParts) {
+	if !common.NonEmptyMultiBytesBounded(bzs, MaxProofElementBytes, ProofBobBytesParts) &&
+		!common.NonEmptyMultiBytesBounded(bzs, MaxProofElementBytes, ProofBobWCBytesParts) {
 		return nil, fmt.Errorf(
 			"expected %d byte parts to construct ProofBob, or %d for ProofBobWC",
 			ProofBobBytesParts, ProofBobWCBytesParts)
@@ -198,7 +198,11 @@ func ProofBobFromBytes(bzs [][]byte) (*ProofBob, error) {
 // ProveBobWC.Verify implements verification of Bob's proof with check "VerifyMtawc_Bob" used in the MtA protocol from GG18Spec (9) Fig. 10.
 // an absent `X` verifies a proof generated without the X consistency check X = g^x
 func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTilde, h1, h2, c1, c2 *big.Int, X *crypto.ECPoint) bool {
-	if ec == nil || pk == nil || NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil {
+	if pf == nil || pf.ProofBob == nil || !pf.ProofBob.ValidateBasic() ||
+		ec == nil || pk == nil || pk.N == nil || NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil {
+		return false
+	}
+	if X != nil && pf.U == nil {
 		return false
 	}
 
@@ -367,7 +371,8 @@ func (pf *ProofBob) Verify(Session []byte, ec elliptic.Curve, pk *paillier.Publi
 }
 
 func (pf *ProofBob) ValidateBasic() bool {
-	return pf.Z != nil &&
+	return pf != nil &&
+		pf.Z != nil &&
 		pf.ZPrm != nil &&
 		pf.T != nil &&
 		pf.V != nil &&
@@ -380,7 +385,7 @@ func (pf *ProofBob) ValidateBasic() bool {
 }
 
 func (pf *ProofBobWC) ValidateBasic() bool {
-	return pf.ProofBob.ValidateBasic() && pf.U != nil
+	return pf != nil && pf.ProofBob != nil && pf.ProofBob.ValidateBasic() && pf.U != nil
 }
 
 func (pf *ProofBob) Bytes() [ProofBobBytesParts][]byte {

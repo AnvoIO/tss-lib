@@ -115,7 +115,20 @@ func (p *BaseParty) unlock() {
 
 // ----- //
 
-func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
+type sensitiveDataClearer interface {
+	ClearSensitiveData()
+}
+
+func clearSensitiveDataOnError(p Party, err *Error) {
+	if err != nil {
+		if clearer, ok := p.(sensitiveDataClearer); ok {
+			clearer.ClearSensitiveData()
+		}
+	}
+}
+
+func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error) {
+	defer func() { clearSensitiveDataOnError(p, err) }()
 	p.lock()
 	defer p.unlock()
 	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
@@ -145,6 +158,7 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) *Error {
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
 func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
+	defer func() { clearSensitiveDataOnError(p, err) }()
 	// fast-fail on an invalid message; do not lock the mutex yet
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err

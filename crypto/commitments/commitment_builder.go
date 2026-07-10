@@ -65,11 +65,14 @@ func ParseSecrets(secrets []*big.Int) ([][]*big.Int, error) {
 	isLenEl := true // are we looking at a length prefix element? (first one is)
 	inLen := int64(len(secrets))
 	for el < inLen {
-		if el < 0 {
-			return nil, errors.New("ParseSecrets: `el` overflow")
-		}
 		if isLenEl {
+			if secrets[el] == nil || !secrets[el].IsInt64() {
+				return nil, fmt.Errorf("ParseSecrets: invalid length prefix for part %d", len(parts))
+			}
 			nextPartLen = secrets[el].Int64()
+			if nextPartLen < 0 {
+				return nil, fmt.Errorf("ParseSecrets: negative length for part %d: %d", len(parts), nextPartLen)
+			}
 			if MaxPartSize < nextPartLen {
 				return nil, fmt.Errorf("ParseSecrets: commitment part too large: part %d, size %d", len(parts), nextPartLen)
 			}
@@ -78,7 +81,7 @@ func ParseSecrets(secrets []*big.Int) ([][]*big.Int, error) {
 			if PartsCap <= len(parts) {
 				return nil, fmt.Errorf("ParseSecrets: commitment has too many parts: part %d, max %d", len(parts), PartsCap)
 			}
-			if inLen < el+nextPartLen {
+			if nextPartLen > inLen-el {
 				return nil, errors.New("ParseSecrets: not enough data to consume stated data length")
 			}
 			part := secrets[el : el+nextPartLen]
@@ -86,6 +89,9 @@ func ParseSecrets(secrets []*big.Int) ([][]*big.Int, error) {
 			el += nextPartLen
 		}
 		isLenEl = !isLenEl
+	}
+	if !isLenEl {
+		return nil, errors.New("ParseSecrets: length prefix is missing its data")
 	}
 	return parts, nil
 }

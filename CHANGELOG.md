@@ -3,6 +3,34 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+Planned v3.1.0 security and maintenance hardening. Existing valid v3 integrations retain their session fallback behavior; explicit fresh session nonces are strongly recommended and become mandatory in v4.
+
+### Fixed (security)
+
+- Rejected negative, nil, non-representable, trailing, and oversized commitment length prefixes before slicing, closing an authenticated-peer panic in proof decoding.
+- Derived every keygen/signing/resharing message slot from committee membership by party key instead of trusting `PartyID.Index`; resharing now uses separate old/new committee-local indexes.
+- Corrected the ECDSA resharing round-2 SSID loop so a new-committee index cannot skip an unrelated old-committee participant.
+- Added a 4 MiB wire-message ceiling and per-element proof decoding bounds before `big.Int` allocation.
+- Made session nonce values immutable across the API boundary and added explicit positive-value validation for callers preparing for v4.
+- Added byte-preserving EdDSA signing via `NewLocalPartyWithBytes` and made invalid legacy lengths return errors rather than panic.
+- Zero temporary secret material after protocol aborts as well as successful completion; resharing copies persisted output before cleanup.
+- Added nil-safe MtA proof and VSS share verification guards.
+
+### Maintenance and governance
+
+- Raised the minimum Go version from 1.23 to 1.25 and test both supported Go release lines (1.25 and 1.26).
+- Updated direct cryptographic/runtime dependencies and pinned `govulncheck` as a Go tool dependency.
+- Removed unverified `curl | tar` Go installation from ARM CI; official setup actions are pinned to release commit SHAs with read-only permissions.
+- Added CI vet/vulnerability gates, Dependabot configuration, a private-reporting policy, PR security checklist, and an explicit solo-maintainer tool-review process.
+
+### Compatibility
+
+- Existing callers continue to run without setting `SessionNonce`, but that compatibility fallback is deprecated; set a new positive nonce for every run before migrating to v4.
+- EdDSA callers should migrate from the numeric message constructor to `NewLocalPartyWithBytes`.
+- Wire format is unchanged, but oversized messages/proof integers previously accepted are now rejected.
+
 ## [v3.0.2] - 2026-07-03
 
 July 2026 security update. A non-breaking patch: no wire-format changes and no

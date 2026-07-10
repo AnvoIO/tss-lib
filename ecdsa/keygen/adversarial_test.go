@@ -188,6 +188,7 @@ func runAdversarialKeygen(t *testing.T, numParties, threshold int, updater func(
 		var P *LocalParty
 		params, pErr := tss.NewParameters(tss.S256(), p2pCtx, pIDs[i], len(pIDs), threshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		if noProofMod {
 			params.SetNoProofMod()
 		}
@@ -397,6 +398,7 @@ func TestAdversarial_ValidateBasic_AllMessages(t *testing.T) {
 	p2pCtx := tss.NewPeerContext(pIDs)
 	params, err := tss.NewParameters(tss.S256(), p2pCtx, pIDs[0], len(pIDs), 1)
 	assert.NoError(t, err)
+	params.SetSessionNonce(big.NewInt(1))
 
 	fixtures, pIDs, err := LoadKeygenTestFixtures(testParticipants)
 	if err != nil {

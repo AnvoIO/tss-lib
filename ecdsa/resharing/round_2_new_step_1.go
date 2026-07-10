@@ -39,7 +39,10 @@ func (round *round2) Start() *tss.Error {
 	}
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	i, ok := round.ReSharingParams().NewPartyIndex()
+	if !ok {
+		return round.WrapError(errors.New("local party is not in the new committee"), Pi)
+	}
 
 	// check consistency of SSID across the old committee. Slot 0 is only the
 	// reference value, not a privileged/validated anchor: on a mismatch the liar
@@ -53,7 +56,7 @@ func (round *round2) Start() *tss.Error {
 	r1msg := round.temp.dgRound1Messages[0].Content().(*DGRound1Message)
 	SSID := r1msg.UnmarshalSSID()
 	for j, Pj := range round.OldParties().IDs() {
-		if j == 0 || j == i {
+		if j == 0 {
 			continue
 		}
 		r1msg := round.temp.dgRound1Messages[j].Content().(*DGRound1Message)
