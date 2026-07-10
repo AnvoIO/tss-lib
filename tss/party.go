@@ -128,9 +128,9 @@ func clearSensitiveDataOnError(p Party, err *Error) {
 }
 
 func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error) {
-	defer func() { clearSensitiveDataOnError(p, err) }()
 	p.lock()
 	defer p.unlock()
+	defer func() { clearSensitiveDataOnError(p, err) }()
 	if p.PartyID() == nil || !p.PartyID().ValidateBasic() {
 		return p.WrapError(fmt.Errorf("could not start. this party has an invalid PartyID: %+v", p.PartyID()))
 	}
@@ -158,13 +158,13 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error)
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
 func BaseUpdate(p Party, msg ParsedMessage, task string) (ok bool, err *Error) {
-	defer func() { clearSensitiveDataOnError(p, err) }()
 	// fast-fail on an invalid message; do not lock the mutex yet
 	if _, err := p.ValidateMessage(msg); err != nil {
 		return false, err
 	}
 	// lock the mutex. need this mtx unlock hook; L108 is recursive so cannot use defer
 	r := func(ok bool, err *Error) (bool, *Error) {
+		clearSensitiveDataOnError(p, err)
 		p.unlock()
 		return ok, err
 	}

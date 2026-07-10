@@ -8,6 +8,7 @@ package signing
 
 import (
 	"math/big"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -82,6 +83,63 @@ signing:
 		}
 	}
 	return parties, result
+}
+
+func TestUpdateRejectsOutsiderWithoutClearingSensitiveData(t *testing.T) {
+	setUp("info")
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	require.NoError(t, err)
+
+	p2pCtx := tss.NewPeerContext(signPIDs)
+	params, err := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[0], len(signPIDs), testThreshold)
+	require.NoError(t, err)
+	params.SetSessionNonce(big.NewInt(1))
+
+	outCh := make(chan tss.Message, 1)
+	endCh := make(chan *common.SignatureData, 1)
+	party := NewLocalPartyWithBytes([]byte("live-session-secret"), params, keys[0], outCh, endCh).(*LocalParty)
+	require.Nil(t, party.Start())
+	require.NotNil(t, party.temp.wi)
+	require.NotNil(t, party.temp.ri)
+
+	wiBefore := new(big.Int).Set(party.temp.wi)
+	riBefore := new(big.Int).Set(party.temp.ri)
+	messageBefore := append([]byte{}, party.temp.message...)
+
+	outsider := tss.NewPartyID("outsider", "outsider", big.NewInt(999999999))
+	outsider.Index = 0
+	_, isMember := signPIDs.IndexOf(outsider)
+	require.False(t, isMember)
+	invalidMessage := NewSignRound1Message(outsider, big.NewInt(1))
+
+	type updateResult struct {
+		ok  bool
+		err *tss.Error
+	}
+	const updateCount = 32
+	results := make(chan updateResult, updateCount)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	for i := 0; i < updateCount; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			<-start
+			ok, updateErr := party.Update(invalidMessage)
+			results <- updateResult{ok: ok, err: updateErr}
+		}()
+	}
+	close(start)
+	wg.Wait()
+	close(results)
+
+	for result := range results {
+		require.False(t, result.ok)
+		require.ErrorContains(t, result.err, "message sender is not a committee member")
+	}
+	require.Equal(t, wiBefore, party.temp.wi)
+	require.Equal(t, riBefore, party.temp.ri)
+	require.Equal(t, messageBefore, party.temp.message)
 }
 
 func TestE2E_EdDSA_SignZeroMessage(t *testing.T) {
