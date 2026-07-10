@@ -32,9 +32,9 @@ correspondence.
 - Do not compare `*PartyID` pointers for identity. Compare keys or use `SortedPartyIDs.IndexOf`.
 - Protobuf wire encoding is unchanged from v3.1, but the mandatory coordinated session nonce changes transcript acceptance and requires every participant to migrate together.
 
-## [v3.1.0] - Unreleased
+## [v3.1.0] - 2026-07-10
 
-Planned v3.1.0 security and maintenance hardening. Existing valid v3 integrations retain their session fallback behavior; explicit fresh session nonces are strongly recommended and become mandatory in v4.
+v3.1.0 security and maintenance hardening. Existing valid v3 integrations retain their session fallback behavior; explicit fresh session nonces are strongly recommended and become mandatory in v4.
 
 ### Fixed (security)
 
