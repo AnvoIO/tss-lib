@@ -3,9 +3,9 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v3.1.0] - 2026-07-10
 
-Planned v3.1.0 security and maintenance hardening. Existing valid v3 integrations retain their session fallback behavior; explicit fresh session nonces are strongly recommended and become mandatory in v4.
+v3.1.0 security and maintenance hardening. Existing valid v3 integrations retain their session fallback behavior; explicit fresh session nonces are strongly recommended and become mandatory in v4.
 
 ### Fixed (security)
 
