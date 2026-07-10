@@ -8,7 +8,7 @@
 
 package tss
 
-import "github.com/AnvoIO/tss-lib/v3/common"
+import "github.com/AnvoIO/tss-lib/v4/common"
 
 // SetNoProofMod is blocked in secure builds.
 func (params *Parameters) SetNoProofMod() {

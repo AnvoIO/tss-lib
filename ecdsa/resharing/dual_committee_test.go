@@ -16,10 +16,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
-	. "github.com/AnvoIO/tss-lib/v3/ecdsa/resharing"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
+	. "github.com/AnvoIO/tss-lib/v4/ecdsa/resharing"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // TestResharing_DualCommitteeMember_SelfShareContinuity is the ECDSA counterpart

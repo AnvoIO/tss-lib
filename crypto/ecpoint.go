@@ -19,7 +19,7 @@ import (
 
 	"github.com/decred/dcrd/dcrec/edwards/v2"
 
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // ECPoint convenience helper

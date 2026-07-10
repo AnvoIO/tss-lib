@@ -71,12 +71,12 @@ if err != nil {
     // handle error
 }
 
-// Strongly recommended in v3 and required in v4: use a fresh positive nonce
-// agreed by every participant. Never reuse it across protocol runs.
+// Required: use a fresh positive nonce agreed by every participant.
+// Never reuse it across protocol runs.
 params.SetSessionNonce(sessionNonce)
 ```
 
-For v3 compatibility, an unset nonce retains the legacy fallback. This is deprecated: set a fresh coordinated nonce before every keygen, signing, or resharing run so the integration is ready for v4.
+`Party.Start()` rejects a missing, zero, or negative nonce before protocol preparation begins. Set a fresh coordinated nonce before every keygen, signing, or resharing run.
 
 ### Key generation
 
@@ -172,10 +172,11 @@ boundary-validation audit. See the [`CHANGELOG`](./CHANGELOG.md) and
 
 ## Breaking changes
 
-### Planned v4: mandatory sessions
+### v4.0: mandatory sessions and module migration
 
-- Every protocol run will require a fresh positive `Parameters.SetSessionNonce` value agreed by all parties.
-- The Go module and internal import path will change from `/v3` to `/v4`.
+- Every protocol run requires a fresh positive `Parameters.SetSessionNonce` value agreed by all parties. `Party.Start()` fails before preparation when the nonce is absent or invalid.
+- Legacy zero/message-derived session fallbacks have been removed.
+- The Go module and internal import path changed from `github.com/AnvoIO/tss-lib/v3` to `github.com/AnvoIO/tss-lib/v4`; integrations must update their imports.
 
 ### v2.0: Paillier preparams
 

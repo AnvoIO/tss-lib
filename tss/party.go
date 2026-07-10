@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v4/common"
 )
 
 type Party interface {
@@ -236,6 +236,10 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error)
 	round := p.FirstRound()
 	if round == nil {
 		err = p.WrapError(errors.New("could not start: FirstRound returned nil"))
+		return abortPartyLocked(p, err)
+	}
+	if nonceErr := round.Params().ValidateSessionNonce(); nonceErr != nil {
+		err = p.WrapError(nonceErr)
 		return abortPartyLocked(p, err)
 	}
 	if err := p.setRound(round); err != nil {

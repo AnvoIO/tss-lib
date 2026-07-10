@@ -9,8 +9,8 @@ package resharing_test
 import (
 	"testing"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
-	. "github.com/AnvoIO/tss-lib/v3/ecdsa/resharing"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
+	. "github.com/AnvoIO/tss-lib/v4/ecdsa/resharing"
 	"github.com/stretchr/testify/assert"
 )
 

@@ -7,16 +7,16 @@
 package keygen
 
 import (
-	"github.com/AnvoIO/tss-lib/v3/crypto/facproof"
-	"github.com/AnvoIO/tss-lib/v3/crypto/modproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/facproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/modproof"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	cmt "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
-	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	cmt "github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // These messages were generated from Protocol Buffers definitions into ecdsa-keygen.pb.go

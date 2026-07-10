@@ -9,7 +9,7 @@ package resharing
 import (
 	"errors"
 
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func (round *round2) Start() *tss.Error {

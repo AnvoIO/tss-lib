@@ -8,7 +8,7 @@
 
 package tss
 
-import "github.com/AnvoIO/tss-lib/v3/common"
+import "github.com/AnvoIO/tss-lib/v4/common"
 
 // SetNoProofMod disables modulus proof verification.
 // This must only be used in trusted test/backward-compatibility environments.

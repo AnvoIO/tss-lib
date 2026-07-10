@@ -20,11 +20,11 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
-	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // tamperAnyField unmarshals wireBytes as an anypb.Any, checks if the TypeUrl

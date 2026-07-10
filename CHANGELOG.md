@@ -3,7 +3,22 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v4.0.0] - Unreleased
+
+Breaking security release layered on v3.1.0.
+
+### Changed (breaking)
+
+- Require every keygen, signing, and resharing `Party.Start()` call to have a fresh positive `Parameters.SetSessionNonce` value agreed by all participants. Validation occurs before protocol preparation or round execution.
+- Remove the legacy zero and message-derived session nonce fallbacks.
+- Change the Go module and internal import path from `github.com/AnvoIO/tss-lib/v3` to `github.com/AnvoIO/tss-lib/v4`.
+
+### Migration
+
+- Update imports to `github.com/AnvoIO/tss-lib/v4/...`.
+- Coordinate a unique positive nonce out of band for each protocol run and call `params.SetSessionNonce(nonce)` before `Party.Start()` on every participant.
+
+## [v3.1.0] - Unreleased
 
 Planned v3.1.0 security and maintenance hardening. Existing valid v3 integrations retain their session fallback behavior; explicit fresh session nonces are strongly recommended and become mandatory in v4.
 

@@ -17,8 +17,8 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	cmts "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	cmts "github.com/AnvoIO/tss-lib/v4/crypto/commitments"
 )
 
 // Iterations controls the soundness of the DLN proof: 128 iterations → 2^{-128} soundness error.

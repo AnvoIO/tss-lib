@@ -12,7 +12,7 @@ import (
 	"math/big"
 	"sort"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v4/common"
 )
 
 type (

@@ -13,7 +13,7 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
+	"github.com/AnvoIO/tss-lib/v4/common"
 )
 
 const (

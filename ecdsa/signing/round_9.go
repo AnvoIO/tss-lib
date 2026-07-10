@@ -9,8 +9,8 @@ package signing
 import (
 	"errors"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func (round *round9) Start() *tss.Error {

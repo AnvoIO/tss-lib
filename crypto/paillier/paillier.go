@@ -28,8 +28,8 @@ import (
 
 	"github.com/otiai10/primes"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	crypto2 "github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	crypto2 "github.com/AnvoIO/tss-lib/v4/crypto"
 )
 
 const (

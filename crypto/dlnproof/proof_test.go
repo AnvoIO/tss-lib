@@ -12,7 +12,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	. "github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
+	. "github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
 )
 
 // TestVerify_NilElementsDoesNotPanic is a defense-in-depth regression test: a

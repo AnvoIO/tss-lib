@@ -209,8 +209,8 @@ func (params *Parameters) SetRand(rand io.Reader) {
 	params.rand = rand
 }
 
-// SessionNonce returns the per-session nonce for SSID uniqueness.
-// Returns nil if not set.
+// SessionNonce returns a copy of the required per-session nonce used for SSID
+// uniqueness. Party.Start rejects nil, zero, and negative nonces.
 func (params *Parameters) SessionNonce() *big.Int {
 	if params.sessionNonce == nil {
 		return nil
@@ -218,10 +218,11 @@ func (params *Parameters) SessionNonce() *big.Int {
 	return new(big.Int).Set(params.sessionNonce)
 }
 
-// SetSessionNonce sets a per-session nonce that all parties must agree on.
+// SetSessionNonce sets a required per-session nonce that all parties must agree on.
 // This value is mixed into the SSID to provide GG20 session binding, preventing
 // cross-session proof replay attacks. All parties in the same session MUST use
-// the same nonce value. The caller is responsible for coordinating this.
+// the same fresh positive nonce value. The caller is responsible for coordinating
+// it and MUST NOT reuse it across protocol runs.
 func (params *Parameters) SetSessionNonce(nonce *big.Int) {
 	if nonce == nil {
 		params.sessionNonce = nil

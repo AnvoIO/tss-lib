@@ -12,11 +12,11 @@ import (
 	"errors"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/modproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/modproof"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 var zero = big.NewInt(0)

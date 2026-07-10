@@ -10,7 +10,7 @@ package keygen
 import (
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
 )
 
 type DlnProofVerifier struct {
