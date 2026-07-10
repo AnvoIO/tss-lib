@@ -14,11 +14,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
-	resharing "github.com/AnvoIO/tss-lib/v3/eddsa/resharing"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
+	resharing "github.com/AnvoIO/tss-lib/v4/eddsa/resharing"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // TestResharingRejectsSlotZeroPubKeySwap is the EdDSA counterpart of the ECDSA

@@ -13,11 +13,11 @@ import (
 	"math/big"
 	"sync"
 
-	"github.com/AnvoIO/tss-lib/v3/crypto/facproof"
-	"github.com/AnvoIO/tss-lib/v3/crypto/modproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/facproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/modproof"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 const (

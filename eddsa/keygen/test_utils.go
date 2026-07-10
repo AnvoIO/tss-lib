@@ -17,8 +17,8 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 const (

@@ -21,13 +21,13 @@ import (
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/dlnproof"
-	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
+	"github.com/AnvoIO/tss-lib/v4/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 const (

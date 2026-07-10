@@ -17,10 +17,10 @@ import (
 	"github.com/ipfs/go-log"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 const (
@@ -64,7 +64,7 @@ func TestE2EConcurrent(t *testing.T) {
 	for i := 0; i < len(signPIDs); i++ {
 		params, err := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), threshold)
 		assert.NoError(t, err)
-		// Deliberately omit SessionNonce here to cover the deprecated v3 fallback.
+		params.SetSessionNonce(big.NewInt(1))
 
 		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)

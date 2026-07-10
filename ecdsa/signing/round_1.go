@@ -12,12 +12,12 @@ import (
 	"fmt"
 	"math/big"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/mta"
-	"github.com/AnvoIO/tss-lib/v3/ecdsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/mta"
+	"github.com/AnvoIO/tss-lib/v4/ecdsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 var zero = big.NewInt(0)
@@ -45,11 +45,7 @@ func (round *round1) Start() *tss.Error {
 	round.number = 1
 	round.started = true
 	round.resetOK()
-	if nonce := round.Params().SessionNonce(); nonce != nil {
-		round.temp.ssidNonce = nonce
-	} else {
-		round.temp.ssidNonce = new(big.Int).Set(round.temp.m)
-	}
+	round.temp.ssidNonce = round.Params().SessionNonce()
 	ssid, err := round.getSSID()
 	if err != nil {
 		return round.WrapError(err)

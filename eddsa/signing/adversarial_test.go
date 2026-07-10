@@ -17,12 +17,12 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func tamperEdDSASignAnyField(wireBytes []byte, targetMsgType string, tamperFn func([]byte) []byte) []byte {

@@ -13,7 +13,7 @@ import (
 	"encoding/binary"
 	"testing"
 
-	. "github.com/AnvoIO/tss-lib/v3/crypto/ckd"
+	. "github.com/AnvoIO/tss-lib/v4/crypto/ckd"
 	"github.com/btcsuite/btcd/btcec/v2"
 	"github.com/btcsuite/btcutil/base58"
 	"github.com/stretchr/testify/assert"

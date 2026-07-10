@@ -7,7 +7,7 @@
 package test
 
 import (
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 // MessageTamperFunc modifies wire bytes from adversary before delivery.

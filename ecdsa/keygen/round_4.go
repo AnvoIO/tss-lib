@@ -10,9 +10,9 @@ package keygen
 import (
 	"errors"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto/paillier"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto/paillier"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func (round *round4) Start() *tss.Error {

@@ -17,10 +17,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/eddsa/keygen"
-	"github.com/AnvoIO/tss-lib/v3/test"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
+	"github.com/AnvoIO/tss-lib/v4/test"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 type invalidUpdateResult struct {
@@ -231,6 +231,24 @@ func TestE2EConcurrentMalformedWireValidation(t *testing.T) {
 	_, sigData := runEdDSASigningE2E(t, big.NewInt(201), keys, signPIDs, injectMalformedWire)
 	require.NotNil(t, sigData)
 	assert.NotEmpty(t, sigData.Signature)
+}
+
+func TestStartRejectsMissingSessionNonce(t *testing.T) {
+	setUp("info")
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	require.NoError(t, err)
+
+	p2pCtx := tss.NewPeerContext(signPIDs)
+	params, err := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[0], len(signPIDs), testThreshold)
+	require.NoError(t, err)
+
+	outCh := make(chan tss.Message, 1)
+	endCh := make(chan *common.SignatureData, 1)
+	party := NewLocalPartyWithBytes([]byte("session-required"), params, keys[0], outCh, endCh)
+
+	startErr := party.Start()
+	require.Error(t, startErr)
+	assert.Contains(t, startErr.Error(), "positive session nonce")
 }
 
 func TestE2E_EdDSA_SignZeroMessage(t *testing.T) {

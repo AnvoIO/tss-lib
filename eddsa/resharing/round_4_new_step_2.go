@@ -12,11 +12,11 @@ import (
 
 	"github.com/pkg/errors"
 
-	"github.com/AnvoIO/tss-lib/v3/common"
-	"github.com/AnvoIO/tss-lib/v3/crypto"
-	"github.com/AnvoIO/tss-lib/v3/crypto/commitments"
-	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
-	"github.com/AnvoIO/tss-lib/v3/tss"
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 func (round *round4) Start() *tss.Error {
