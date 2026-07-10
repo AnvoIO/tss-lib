@@ -29,6 +29,7 @@ Planned v3.1.0 security and maintenance hardening. Existing valid v3 integration
 
 - Existing callers continue to run without setting `SessionNonce`, but that compatibility fallback is deprecated; set a new positive nonce for every run before migrating to v4.
 - EdDSA callers should migrate from the numeric message constructor to `NewLocalPartyWithBytes`.
+- Parameter construction now requires peer contexts sorted by distinct, non-zero-mod-order party keys, and the local `PartyID.Index` must match its sorted committee position.
 - Wire format is unchanged, but oversized messages/proof integers previously accepted are now rejected.
 
 ## [v3.0.2] - 2026-07-03
