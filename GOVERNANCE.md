@@ -8,14 +8,14 @@ If another qualified maintainer becomes available, cryptographic and protocol ch
 
 ## Change classes
 
-High-risk changes include protocol rounds, transcript/SSID construction, proof systems, curve or modular arithmetic, randomness, key serialization, committee membership/indexing, wire parsing, and secret cleanup. Dependency and CI changes are security-sensitive maintenance changes.
+High-risk changes include protocol rounds, transcript/SSID construction, proof systems, curve or modular arithmetic, randomness, key serialization, committee membership/indexing, wire parsing, secret cleanup, and concurrent lifecycle or error handling. Dependency and CI changes are security-sensitive maintenance changes.
 
 ## Solo-maintainer merge process
 
 For a high-risk change:
 
 1. State the security invariant and threat model in the PR.
-2. Add an adversarial regression that fails before the fix.
+2. Add an adversarial regression that fails before the fix, including concurrent honest/adversarial interleavings when the affected path supports concurrent use.
 3. Run the full required checks from the PR template.
 4. Obtain a fresh-context review of the final diff. Codex, Claude, or another review tool may be used when no human reviewer is available.
 5. Record the tool/model, date, commit SHA, scope, findings, and disposition in the PR. Preserve disagreements rather than averaging them away.
@@ -29,7 +29,7 @@ Tool output must not be represented as human approval or an independent professi
 Create a ruleset for `master` with:
 
 - deletion and force pushes blocked;
-- required status checks for Go fmt, all Build & Test matrix jobs, Signing race regression, and Vet and vulnerability scan;
+- required status checks for Go fmt, all Build & Test matrix jobs, Full race detector, and Vet and vulnerability scan;
 - branches required to be up to date before merge;
 - signed commits required where contributor tooling supports them;
 - administrator bypass limited to emergency response and recorded in the incident notes.
