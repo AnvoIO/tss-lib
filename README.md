@@ -13,6 +13,25 @@ A Go implementation of multi-party {t,n}-threshold ECDSA and EdDSA signature sch
 
 Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security hardening, constant-time arithmetic, session-bound Fiat-Shamir challenges, VSS correctness fixes, and adversarial input-validation hardening at protocol message boundaries.
 
+## Release line
+
+This source tree is the breaking v4 release line:
+
+- Go module: `github.com/AnvoIO/tss-lib/v4`
+- Release branch: `release/v4.0.0`
+- First release: `v4.0.0`
+
+The v3 API is not bundled into the v4 source tree. It remains available and
+maintained independently through the `v3.1.0` tag and the
+`release/v3.1.0` branch using module path
+`github.com/AnvoIO/tss-lib/v3`. Releasing v4 does not delete or invalidate
+tagged v3 source or existing v3 module downloads.
+
+Choose the major version through the Go import path. Do not mix v3 and v4
+participants in one keygen, signing, or resharing session. Although v4 does not
+add protobuf fields relative to v3.1, its mandatory session nonce and stricter
+API contracts form a coordinated migration boundary.
+
 ## Features
 
 - **ECDSA threshold signatures** -- {t,n}-threshold signing on secp256k1 and other curves
@@ -151,6 +170,24 @@ The transport layer is your responsibility. You must provide:
 Inbound transports should reject messages above 4 MiB before buffering; `ParseWireMessage` enforces the same ceiling as defense in depth.
 
 ## Releases
+
+### v4.0.0: mandatory sessions and immutable identities (breaking)
+
+The first v4 release requires a fresh positive session nonce before every
+`Party.Start()`, removes the legacy session fallback, changes the module path to
+`/v4`, freezes committee and local identity snapshots, and narrows the public
+`Party` interface to serialized application entry points. See the
+[`CHANGELOG`](./CHANGELOG.md) for migration details.
+
+### v3.1.0: wire-compatible security and maintenance release (separate v3 line)
+
+The v3.1 release remains at module path
+`github.com/AnvoIO/tss-lib/v3`. It preserves the v3 protobuf/wire format and
+legacy nonce fallback while adding protocol-boundary hardening, terminal party
+lifecycle handling, race regressions, dependency maintenance, and governance
+controls. A fresh positive nonce is strongly recommended. v3 source remains
+available from its own tag and maintenance branch; it is not copied into this
+v4 tree.
 
 ### v3.0.2: July 2026 resharing-continuity and protocol-logic update (non-breaking)
 
