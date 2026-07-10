@@ -76,7 +76,7 @@ The follow-on v4 branch makes the nonce requirement mandatory and changes the Go
 
 ## Residual risks and manual actions
 
-1. No second human cryptographer reviewed this change set. Codex/Claude review records are useful supporting evidence, not an independent professional audit.
+1. No second human cryptographer reviewed this change set. Fresh-context review records are supporting evidence, not an independent professional audit.
 2. GG18/GG20-family protocols have complex malicious-security and identifiable-abort assumptions. This review is source-level assurance, not a new formal proof.
 3. The legacy EdDSA numeric constructor remains for compatibility and is inherently ambiguous without an explicit byte length; downstream code should prohibit it.
 4. GitHub-hosted rulesets, private vulnerability reporting, secret scanning, push protection, and tag protection must be enabled manually as listed in `GOVERNANCE.md`.
