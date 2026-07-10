@@ -32,7 +32,7 @@ Applications must provide:
 Security-relevant releases should satisfy all of the following:
 
 1. CI passes on supported Go versions and architectures.
-2. `go vet`, `govulncheck`, adversarial tests, and applicable race tests pass.
+2. `go vet`, `govulncheck`, adversarial tests, the full race suite, and targeted repeated race tests for changed concurrent paths pass.
 3. A fresh-context review record identifies the reviewed commit and disposition of every finding.
 4. API, transcript, wire, and saved-key compatibility are documented.
 5. The release is made from the reviewed commit with a signed tag and published checksums.

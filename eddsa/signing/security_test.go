@@ -7,6 +7,7 @@
 package signing
 
 import (
+	"errors"
 	"math/big"
 	"sync"
 	"sync/atomic"
@@ -27,8 +28,16 @@ type invalidUpdateResult struct {
 	err *tss.Error
 }
 
+type invalidInjectionMode uint8
+
+const (
+	injectNothing invalidInjectionMode = iota
+	injectOutsiderMessage
+	injectMalformedWire
+)
+
 // runEdDSASigningE2E runs a full EdDSA signing protocol and returns the parties and signature data.
-func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySaveData, signPIDs tss.SortedPartyIDs, injectInvalidSender ...bool) ([]*LocalParty, *common.SignatureData) {
+func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySaveData, signPIDs tss.SortedPartyIDs, injection ...invalidInjectionMode) ([]*LocalParty, *common.SignatureData) {
 	t.Helper()
 
 	p2pCtx := tss.NewPeerContext(signPIDs)
@@ -38,11 +47,15 @@ func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySave
 	outCh := make(chan tss.Message, len(signPIDs))
 	endCh := make(chan *common.SignatureData, len(signPIDs))
 
-	injectInvalid := len(injectInvalidSender) > 0 && injectInvalidSender[0]
+	mode := injectNothing
+	if len(injection) > 0 {
+		mode = injection[0]
+	}
+	injectInvalid := mode != injectNothing
 	invalidResults := make(chan invalidUpdateResult, 256)
 	var invalidWG sync.WaitGroup
 	var invalidMessage tss.ParsedMessage
-	if injectInvalid {
+	if mode == injectOutsiderMessage {
 		outsider := tss.NewPartyID("outsider", "outsider", big.NewInt(999999999))
 		outsider.Index = 0
 		_, isMember := signPIDs.IndexOf(outsider)
@@ -57,7 +70,22 @@ func runEdDSASigningE2E(t *testing.T, msg *big.Int, keys []keygen.LocalPartySave
 		invalidWG.Add(1)
 		go func() {
 			defer invalidWG.Done()
-			ok, updateErr := party.Update(invalidMessage)
+			_ = party.Running()
+			_ = party.String()
+			_ = party.WaitingFor()
+			_ = party.WrapError(errors.New("concurrent status probe"))
+
+			var ok bool
+			var updateErr *tss.Error
+			switch mode {
+			case injectOutsiderMessage:
+				ok, updateErr = party.Update(invalidMessage)
+			case injectMalformedWire:
+				from := signPIDs[(party.PartyID().Index+1)%len(signPIDs)]
+				ok, updateErr = party.UpdateFromBytes([]byte{0xff}, from, true)
+			default:
+				panic("unsupported invalid injection mode")
+			}
 			invalidResults <- invalidUpdateResult{ok: ok, err: updateErr}
 		}()
 	}
@@ -119,7 +147,10 @@ signing:
 		close(invalidResults)
 		for invalidResult := range invalidResults {
 			require.False(t, invalidResult.ok)
-			require.ErrorContains(t, invalidResult.err, "message sender is not a committee member")
+			require.Error(t, invalidResult.err)
+			if mode == injectOutsiderMessage {
+				require.ErrorContains(t, invalidResult.err, "message sender is not a committee member")
+			}
 		}
 	}
 	return parties, result
@@ -187,7 +218,17 @@ func TestE2EConcurrentInvalidSenderValidation(t *testing.T) {
 	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
 	require.NoError(t, err)
 
-	_, sigData := runEdDSASigningE2E(t, big.NewInt(200), keys, signPIDs, true)
+	_, sigData := runEdDSASigningE2E(t, big.NewInt(200), keys, signPIDs, injectOutsiderMessage)
+	require.NotNil(t, sigData)
+	assert.NotEmpty(t, sigData.Signature)
+}
+
+func TestE2EConcurrentMalformedWireValidation(t *testing.T) {
+	setUp("info")
+	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
+	require.NoError(t, err)
+
+	_, sigData := runEdDSASigningE2E(t, big.NewInt(201), keys, signPIDs, injectMalformedWire)
 	require.NotNil(t, sigData)
 	assert.NotEmpty(t, sigData.Signature)
 }

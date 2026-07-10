@@ -80,7 +80,7 @@ go vet ./...
 go tool govulncheck ./...
 ```
 
-Cryptographic and protocol changes also require an adversarial regression, relevant race tests, and the review record described in [GOVERNANCE.md](./GOVERNANCE.md). Security reports must follow [SECURITY.md](./SECURITY.md), not the public issue tracker.
+Cryptographic and protocol changes also require an adversarial regression, `make test_unit_race`, targeted repeatable race tests for each changed concurrent path, and the review record described in [GOVERNANCE.md](./GOVERNANCE.md). A clean race run only covers paths and schedules exercised by tests; use channel-controlled interleavings where possible. Security reports must follow [SECURITY.md](./SECURITY.md), not the public issue tracker.
 
 ## Conduct
 

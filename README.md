@@ -42,6 +42,9 @@ make test_unit
 
 # Unit tests with race detector
 make test_unit_race
+
+# Repeated adversarial lifecycle/wire concurrency regressions
+make test_lifecycle_race
 ```
 
 ## Usage
@@ -120,6 +123,16 @@ UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (ok bool,
 // Sending messages to the wire
 WireBytes() ([]byte, *tss.MessageRouting, error)
 ```
+
+Concurrent transports may call `Start`, `Update`, and `UpdateFromBytes` on the
+same party; updates are serialized, valid messages that arrive just before
+`Start` are queued, and valid messages already queued after successful completion
+are ignored. A fatal protocol error terminalizes the party and clears temporary
+secrets before any queued update can run. `Running`, `WaitingFor`, `String`,
+and `WrapError` are safe status/error helpers during concurrent delivery.
+`ValidateMessage` and `StoreMessage` are low-level hooks and must not be called
+directly from concurrent application code. Treat party IDs and peer contexts as
+immutable after constructing parameters.
 
 ## How to use this securely
 
