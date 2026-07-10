@@ -32,7 +32,10 @@ func (round *round3) Start() *tss.Error {
 	}
 
 	Pi := round.PartyID()
-	i := Pi.Index
+	i, ok := round.ReSharingParams().OldPartyIndex()
+	if !ok {
+		return round.WrapError(errors.New("local party is not in the old committee"), Pi)
+	}
 
 	// 2. send share to Pj from the new committee
 	for j, Pj := range round.NewParties().IDs() {

@@ -49,11 +49,11 @@ type (
 
 		// temp data (thrown away after sign) / round 1
 		wi,
-		m,
 		ri *big.Int
-		fullBytesLen int
-		pointRi      *crypto.ECPoint
-		deCommit     cmt.HashDeCommitment
+		message  []byte
+		initErr  error
+		pointRi  *crypto.ECPoint
+		deCommit cmt.HashDeCommitment
 
 		// round 2
 		cjs []*big.Int
@@ -67,6 +67,8 @@ type (
 	}
 )
 
+// NewLocalParty is retained for compatibility. New code should use
+// NewLocalPartyWithBytes so leading zero bytes are represented unambiguously.
 func NewLocalParty(
 	msg *big.Int,
 	params *tss.Parameters,
@@ -74,6 +76,52 @@ func NewLocalParty(
 	out chan<- tss.Message,
 	end chan<- *common.SignatureData,
 	fullBytesLen ...int,
+) tss.Party {
+	message, err := legacyMessageBytes(msg, fullBytesLen...)
+	return newLocalParty(message, err, params, key, out, end)
+}
+
+// NewLocalPartyWithBytes constructs an EdDSA signer over the exact message
+// bytes supplied by the caller, including leading zero bytes.
+func NewLocalPartyWithBytes(
+	message []byte,
+	params *tss.Parameters,
+	key keygen.LocalPartySaveData,
+	out chan<- tss.Message,
+	end chan<- *common.SignatureData,
+) tss.Party {
+	return newLocalParty(append([]byte{}, message...), nil, params, key, out, end)
+}
+
+func legacyMessageBytes(msg *big.Int, fullBytesLen ...int) ([]byte, error) {
+	if msg == nil {
+		return nil, errors.New("message must not be nil")
+	}
+	if msg.Sign() < 0 {
+		return nil, errors.New("message must not be negative")
+	}
+	if len(fullBytesLen) > 1 {
+		return nil, errors.New("at most one full message byte length may be supplied")
+	}
+	minimal := msg.Bytes()
+	if len(fullBytesLen) == 0 {
+		return append([]byte{}, minimal...), nil
+	}
+	if fullBytesLen[0] < 0 || fullBytesLen[0] < len(minimal) {
+		return nil, fmt.Errorf("full message byte length %d is smaller than the encoded message length %d", fullBytesLen[0], len(minimal))
+	}
+	message := make([]byte, fullBytesLen[0])
+	msg.FillBytes(message)
+	return message, nil
+}
+
+func newLocalParty(
+	message []byte,
+	initErr error,
+	params *tss.Parameters,
+	key keygen.LocalPartySaveData,
+	out chan<- tss.Message,
+	end chan<- *common.SignatureData,
 ) tss.Party {
 	partyCount := len(params.Parties().IDs())
 	p := &LocalParty{
@@ -91,12 +139,8 @@ func NewLocalParty(
 	p.temp.signRound3Messages = make([]tss.ParsedMessage, partyCount)
 
 	// temp data init
-	p.temp.m = msg
-	if len(fullBytesLen) > 0 {
-		p.temp.fullBytesLen = fullBytesLen[0]
-	} else {
-		p.temp.fullBytesLen = 0
-	}
+	p.temp.message = message
+	p.temp.initErr = initErr
 	p.temp.cjs = make([]*big.Int, partyCount)
 	return p
 }
@@ -119,12 +163,19 @@ func (td *localTempData) Clear() {
 	if td.r != nil {
 		td.r.SetInt64(0)
 	}
-	td.m = nil // externally provided; do not mutate caller's big.Int
+	for i := range td.message {
+		td.message[i] = 0
+	}
+	td.message = nil
 	for _, c := range td.cjs {
 		if c != nil {
 			c.SetInt64(0)
 		}
 	}
+}
+
+func (p *LocalParty) ClearSensitiveData() {
+	p.temp.Clear()
 }
 
 func (p *LocalParty) FirstRound() tss.Round {
@@ -133,6 +184,9 @@ func (p *LocalParty) FirstRound() tss.Round {
 
 func (p *LocalParty) Start() *tss.Error {
 	return tss.BaseStart(p, TaskName, func(round tss.Round) *tss.Error {
+		if p.temp.initErr != nil {
+			return round.WrapError(p.temp.initErr)
+		}
 		round1, ok := round.(*round1)
 		if !ok {
 			return round.WrapError(errors.New("unable to Start(). party is in an unexpected round"))
@@ -157,15 +211,13 @@ func (p *LocalParty) UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroa
 }
 
 func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
-	if msg.GetFrom() == nil || !msg.GetFrom().ValidateBasic() {
-		return false, p.WrapError(fmt.Errorf("received msg with an invalid sender: %s", msg))
+	if ok, err := p.BaseParty.ValidateMessage(msg); !ok || err != nil {
+		return ok, err
 	}
-	// check that the message's "from index" will fit into the array
-	if maxFromIdx := len(p.params.Parties().IDs()) - 1; maxFromIdx < msg.GetFrom().Index {
-		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
-			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
+	if _, ok := p.params.Parties().IDs().IndexOf(msg.GetFrom()); !ok {
+		return false, p.WrapError(fmt.Errorf("message sender is not a committee member"), msg.GetFrom())
 	}
-	return p.BaseParty.ValidateMessage(msg)
+	return true, nil
 }
 
 func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
@@ -173,7 +225,7 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
 		return ok, err
 	}
-	fromPIdx := msg.GetFrom().Index
+	fromPIdx, _ := p.params.Parties().IDs().IndexOf(msg.GetFrom())
 
 	// switch/case is necessary to store any messages beyond current round
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.

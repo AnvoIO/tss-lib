@@ -33,3 +33,17 @@ func TestVerify_NilElementsDoesNotPanic(t *testing.T) {
 		assert.False(t, ok, "a proof with nil elements must not verify")
 	})
 }
+
+func TestUnmarshalDLNProofRejectsOversizedElement(t *testing.T) {
+	parts := make([][]byte, 2+(Iterations*2))
+	for i := range parts {
+		parts[i] = []byte{1}
+	}
+	parts[0] = big.NewInt(Iterations).Bytes()
+	parts[Iterations+1] = big.NewInt(Iterations).Bytes()
+	parts[1] = make([]byte, MaxProofElementBytes+1)
+
+	proof, err := UnmarshalDLNProof(parts)
+	assert.Nil(t, proof)
+	assert.Error(t, err)
+}

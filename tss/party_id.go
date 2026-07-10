@@ -29,7 +29,10 @@ type (
 )
 
 func (pid *PartyID) ValidateBasic() bool {
-	return pid != nil && pid.Key != nil && 0 <= pid.Index
+	return pid != nil &&
+		pid.MessageWrapper_PartyID != nil &&
+		len(pid.Key) > 0 &&
+		0 <= pid.Index
 }
 
 // --- ProtoBuf Extensions
@@ -123,6 +126,20 @@ func (spids SortedPartyIDs) FindByKey(key *big.Int) *PartyID {
 	return nil
 }
 
+// IndexOf returns the committee-local position for a party key. Protocol code
+// must use this value instead of trusting PartyID.Index received from a peer.
+func (spids SortedPartyIDs) IndexOf(party *PartyID) (int, bool) {
+	if party == nil || party.MessageWrapper_PartyID == nil || len(party.Key) == 0 {
+		return -1, false
+	}
+	for i, candidate := range spids {
+		if candidate != nil && candidate.MessageWrapper_PartyID != nil && candidate.KeyInt().Cmp(party.KeyInt()) == 0 {
+			return i, true
+		}
+	}
+	return -1, false
+}
+
 func (spids SortedPartyIDs) Exclude(exclude *PartyID) SortedPartyIDs {
 	newSpIDs := make(SortedPartyIDs, 0, len(spids))
 	for _, pid := range spids {
@@ -141,7 +158,7 @@ func (spids SortedPartyIDs) Len() int {
 }
 
 func (spids SortedPartyIDs) Less(a, b int) bool {
-	return spids[a].KeyInt().Cmp(spids[b].KeyInt()) <= 0
+	return spids[a].KeyInt().Cmp(spids[b].KeyInt()) < 0
 }
 
 func (spids SortedPartyIDs) Swap(a, b int) {

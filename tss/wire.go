@@ -8,14 +8,22 @@ package tss
 
 import (
 	"errors"
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 )
+
+// MaxWireMessageSize limits allocations and decoding work on untrusted input.
+const MaxWireMessageSize = 4 << 20 // 4 MiB
 
 // Used externally to update a LocalParty with a valid ParsedMessage
 func ParseWireMessage(wireBytes []byte, from *PartyID, isBroadcast bool) (ParsedMessage, error) {
 	if from == nil {
 		return nil, errors.New("ParseWireMessage: from party must not be nil")
+	}
+	if len(wireBytes) > MaxWireMessageSize {
+		return nil, fmt.Errorf("ParseWireMessage: message is too large: %d bytes (max %d)", len(wireBytes), MaxWireMessageSize)
 	}
 	wire := new(MessageWrapper)
 	wire.Message = new(anypb.Any)

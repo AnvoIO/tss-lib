@@ -38,14 +38,10 @@ func (round *round1) Start() *tss.Error {
 	Pi := round.PartyID()
 	i := Pi.Index
 
-	// GG20 session binding: use caller-provided session nonce if available.
-	// For keygen, all parties must agree on the nonce via external coordination
-	// (e.g., coordinator-assigned session ID) since no shared session-unique
-	// value is available within the protocol itself.
 	if nonce := round.Params().SessionNonce(); nonce != nil {
-		round.temp.ssidNonce = new(big.Int).Set(nonce)
+		round.temp.ssidNonce = nonce
 	} else {
-		round.temp.ssidNonce = new(big.Int).SetUint64(0)
+		round.temp.ssidNonce = new(big.Int)
 	}
 	ssid, err := round.getSSID()
 	if err != nil {

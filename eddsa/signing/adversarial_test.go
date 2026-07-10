@@ -58,6 +58,7 @@ func runAdversarialEdDSASigning(t *testing.T, updater func(tss.Party, tss.Messag
 	for i := 0; i < len(signPIDs); i++ {
 		params, pErr := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), testThreshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(msg, params, keys[i], outCh, endCh).(*LocalParty)
 		parties = append(parties, P)
 		go func(P *LocalParty) {

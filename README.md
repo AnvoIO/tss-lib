@@ -13,6 +13,24 @@ A Go implementation of multi-party {t,n}-threshold ECDSA and EdDSA signature sch
 
 Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security hardening, constant-time arithmetic, session-bound Fiat-Shamir challenges, VSS correctness fixes, and adversarial input-validation hardening at protocol message boundaries.
 
+## Release line
+
+This source tree is the wire-compatible v3 maintenance line:
+
+- Go module: `github.com/AnvoIO/tss-lib/v3`
+- Release branch: `release/v3.1.0`
+- Current release: `v3.1.0`
+
+The breaking v4 API is released independently from its own branch and tag using
+module path `github.com/AnvoIO/tss-lib/v4`. It is not bundled into this source
+tree. Releasing v4 does not delete, replace, or invalidate tagged v3 source;
+future compatible v3 security fixes can continue from the v3 maintenance branch.
+
+Choose the major version through the Go import path. Do not mix v3 and v4
+participants in one keygen, signing, or resharing session. v3.1 preserves the v3
+protobuf/wire format and legacy nonce fallback; applications should nevertheless
+set a fresh positive session nonce for every run before migrating to v4.
+
 ## Features
 
 - **ECDSA threshold signatures** -- {t,n}-threshold signing on secp256k1 and other curves
@@ -25,7 +43,7 @@ Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security
 
 ## Requirements
 
-- Go 1.23+
+- Go 1.25+
 - Protocol Buffers compiler (for regenerating wire format, not required to build)
 
 ## Building
@@ -42,6 +60,9 @@ make test_unit
 
 # Unit tests with race detector
 make test_unit_race
+
+# Repeated adversarial lifecycle/wire concurrency regressions
+make test_lifecycle_race
 ```
 
 ## Usage
@@ -67,7 +88,13 @@ params, err := tss.NewParameters(tss.S256(), ctx, thisParty, len(parties), thres
 if err != nil {
     // handle error
 }
+
+// Strongly recommended in v3 and required in v4: use a fresh positive nonce
+// agreed by every participant. Never reuse it across protocol runs.
+params.SetSessionNonce(sessionNonce)
 ```
+
+For v3 compatibility, an unset nonce retains the legacy fallback. This is deprecated: set a fresh coordinated nonce before every keygen, signing, or resharing run so the integration is ready for v4.
 
 ### Key generation
 
@@ -87,6 +114,12 @@ go func() {
     err := party.Start()
     // handle err ...
 }()
+```
+
+For EdDSA, pass the exact message bytes so leading zeros are preserved:
+
+```go
+party := eddsasigning.NewLocalPartyWithBytes(messageBytes, params, ourKeyData, outCh, endCh)
 ```
 
 ### Re-sharing
@@ -109,16 +142,39 @@ UpdateFromBytes(wireBytes []byte, from *tss.PartyID, isBroadcast bool) (ok bool,
 WireBytes() ([]byte, *tss.MessageRouting, error)
 ```
 
+Concurrent transports may call `Start`, `Update`, and `UpdateFromBytes` on the
+same party; updates are serialized, valid messages that arrive just before
+`Start` are queued, and valid messages already queued after successful completion
+are ignored. A fatal protocol error terminalizes the party and clears temporary
+secrets before any queued update can run. `Running`, `WaitingFor`, `String`,
+and `WrapError` are safe status/error helpers during concurrent delivery.
+`ValidateMessage` and `StoreMessage` are low-level hooks and must not be called
+directly from concurrent application code. Treat party IDs and peer contexts as
+immutable after constructing parameters.
+
 ## How to use this securely
 
 The transport layer is your responsibility. You must provide:
 
 - **Broadcast and point-to-point channels** with end-to-end encryption (TLS with AEAD recommended)
-- **Session IDs** unique to each protocol run, agreed upon out-of-band before rounds begin
+- **Session IDs** unique to each protocol run, agreed upon out-of-band before rounds begin; pass the positive value with `SetSessionNonce`
 - **Reliable broadcast** so all parties receive identical messages (hash-and-compare)
 - **Timeouts and error handling** -- use `Party.WaitingFor()` and `*tss.Error` culprit info
 
+Inbound transports should reject messages above 4 MiB before buffering; `ParseWireMessage` enforces the same ceiling as defense in depth.
+
 ## Releases
+
+### v3.1.0: wire-compatible security and maintenance release
+
+This release preserves the v3 protobuf/wire format and existing session fallback
+while adding protocol-boundary validation, committee-local sender binding,
+terminal party lifecycle handling, malformed-wire and queued-abort race
+regressions, dependency maintenance, and repository governance controls.
+`Parameters.SetSessionNonce` remains optional for v3 compatibility but a fresh
+positive value agreed by every participant is strongly recommended. See the
+[`CHANGELOG`](./CHANGELOG.md) and
+[`security review`](./security/2026-07-10-security-maintenance-review.md).
 
 ### v3.0.2: July 2026 resharing-continuity and protocol-logic update (non-breaking)
 
@@ -144,6 +200,16 @@ boundary-validation audit. See the [`CHANGELOG`](./CHANGELOG.md) and
 [Appendix B of the audit report](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation).
 
 ## Breaking changes
+
+### v4.0: separate breaking release
+
+- Every protocol run requires a fresh positive `Parameters.SetSessionNonce` value agreed by all parties.
+- The Go module and internal import path changes from `/v3` to `/v4`.
+- Legacy zero/message-derived session fallbacks are removed.
+- Peer contexts and parameter identities become defensive snapshots.
+- The public `Party` interface no longer exposes low-level validation/storage/round hooks.
+- v4 is maintained in a separate source branch; the v3 tag and maintenance branch remain available.
+- All participants in a protocol session must migrate together.
 
 ### v2.0: Paillier preparams
 

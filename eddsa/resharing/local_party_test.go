@@ -71,6 +71,7 @@ func TestE2EConcurrent(t *testing.T) {
 	for j, pID := range oldPIDs {
 		params, err := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(params, oldKeys[j], outCh, endCh).(*LocalParty) // discard old key data
 		oldCommittee = append(oldCommittee, P)
 	}
@@ -79,6 +80,7 @@ func TestE2EConcurrent(t *testing.T) {
 	for _, pID := range newPIDs {
 		params, err := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 		save := keygen.NewLocalPartySaveData(newPCount)
 		P := NewLocalParty(params, save, outCh, endCh).(*LocalParty)
 		newCommittee = append(newCommittee, P)
@@ -169,6 +171,7 @@ signing:
 	for j, signPID := range signPIDs {
 		params, err := tss.NewParameters(tss.Edwards(), signP2pCtx, signPID, len(signPIDs), newThreshold)
 		assert.NoError(t, err)
+		params.SetSessionNonce(big.NewInt(1))
 		P := signing.NewLocalParty(big.NewInt(42), params, signKeys[j], signOutCh, signEndCh).(*signing.LocalParty)
 		signParties = append(signParties, P)
 		go func(P *signing.LocalParty) {

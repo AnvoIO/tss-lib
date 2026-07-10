@@ -183,6 +183,10 @@ func (td *localTempData) Clear() {
 	}
 }
 
+func (p *LocalParty) ClearSensitiveData() {
+	p.temp.Clear()
+}
+
 func (p *LocalParty) FirstRound() tss.Round {
 	return newRound1(p.params, &p.keys, p.data, &p.temp, p.out, p.end)
 }
@@ -216,10 +220,8 @@ func (p *LocalParty) ValidateMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	if ok, err := p.BaseParty.ValidateMessage(msg); !ok || err != nil {
 		return ok, err
 	}
-	// check that the message's "from index" will fit into the array
-	if maxFromIdx := len(p.params.Parties().IDs()) - 1; maxFromIdx < msg.GetFrom().Index {
-		return false, p.WrapError(fmt.Errorf("received msg with a sender index too great (%d <= %d)",
-			maxFromIdx, msg.GetFrom().Index), msg.GetFrom())
+	if _, ok := p.params.Parties().IDs().IndexOf(msg.GetFrom()); !ok {
+		return false, p.WrapError(fmt.Errorf("message sender is not a committee member"), msg.GetFrom())
 	}
 	return true, nil
 }
@@ -229,7 +231,7 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	if ok, err := p.ValidateMessage(msg); !ok || err != nil {
 		return ok, err
 	}
-	fromPIdx := msg.GetFrom().Index
+	fromPIdx, _ := p.params.Parties().IDs().IndexOf(msg.GetFrom())
 
 	// switch/case is necessary to store any messages beyond current round
 	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.

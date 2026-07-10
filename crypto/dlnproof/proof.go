@@ -23,6 +23,7 @@ import (
 
 // Iterations controls the soundness of the DLN proof: 128 iterations → 2^{-128} soundness error.
 const Iterations = 128
+const MaxProofElementBytes = 512
 
 type (
 	Proof struct {
@@ -131,6 +132,9 @@ func (p *Proof) Serialize() ([][]byte, error) {
 
 func UnmarshalDLNProof(bzs [][]byte) (*Proof, error) {
 	bis := make([]*big.Int, len(bzs))
+	if !common.NonEmptyMultiBytesBounded(bzs, MaxProofElementBytes, 2+(Iterations*2)) {
+		return nil, fmt.Errorf("UnmarshalDLNProof received invalid or oversized proof elements")
+	}
 	for i := range bis {
 		bis[i] = new(big.Int).SetBytes(bzs[i])
 	}

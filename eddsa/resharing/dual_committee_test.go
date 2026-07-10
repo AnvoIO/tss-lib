@@ -79,6 +79,7 @@ func TestResharing_DualCommitteeMember_SelfShareContinuity(t *testing.T) {
 	newInstance := func(pID *tss.PartyID, save keygen.LocalPartySaveData) *LocalParty {
 		params, pErr := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, len(oldPIDs), threshold, newPCount, newThreshold)
 		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
 		P := NewLocalParty(params, save, outCh, endCh).(*LocalParty)
 		partyByKey[pID.KeyInt().String()] = P
 		instances = append(instances, P)
