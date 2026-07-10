@@ -3,9 +3,24 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [v4.0.0] - 2026-07-10
 
-Planned v4.0.0 breaking security release layered on v3.1.0.
+v4.0.0 breaking security release, published concurrently with v3.1.0.
+
+### Relationship to v3.1.0
+
+Both releases contain the v3.1 security, lifecycle, race, maintenance, and
+governance hardening. Applications choose one major release line:
+
+| Area | v3.1.0 | v4.0.0 |
+| --- | --- | --- |
+| Release intent | Wire-compatible v3 maintenance | Breaking migration |
+| Go module | `github.com/AnvoIO/tss-lib/v3` | `github.com/AnvoIO/tss-lib/v4` |
+| Session nonce | Optional legacy fallback; fresh positive nonce strongly recommended | Fresh positive coordinated nonce required before `Party.Start()` |
+| Party identities | Reference-backed; callers must treat contexts and IDs as immutable | Constructor snapshots and identity accessors are defensive deep copies; `SetIDs` removed |
+| Public `Party` API | Low-level validation/storage/round hooks remain exposed but are not concurrent application entry points | Public interface narrowed to serialized lifecycle/update and concurrency-safe status/error operations |
+| Wire and transcript | v3 protobuf format and legacy transcript fallback retained | Same protobuf fields as v3.1, but mandatory nonce changes transcript acceptance |
+| Session deployment | Use only v3 participants | Use only v4 participants; migrate every party together |
 
 ### Changed (breaking)
 
@@ -73,7 +88,7 @@ It closes a resharing-continuity
 authentication bug and a resharing modulus-size gap, ports an upstream
 dual-committee correctness fix to EdDSA, corrects abort attribution in several
 paths, and adds a batch of defense-in-depth guards — all identified by a
-multi-agent audit of resharing continuity and protocol-logic invariants. A
+security audit of resharing continuity and protocol-logic invariants. A
 follow-up pass closed a reachable zero-scalar verifier DoS, added non-panicking
 scalar-multiplication variants, hardened two one-time secret-modulus inversions
 against timing leaks, and extended test coverage. See
@@ -190,7 +205,7 @@ of the audit report for full detail.
 June 2026 security update. A non-breaking security patch: no API or wire-format
 changes, interoperable with honest v3.0.0 peers. It closes two input-validation
 gaps cross-referenced from upstream advisories and adds six defense-in-depth /
-canonicality hardenings identified by a multi-agent audit of adversarial input
+canonicality hardenings identified by a security audit of adversarial input
 validation at protocol message boundaries. See
 [Appendix B](./security/2026-02-24-tss-lib-full-audit.md#appendix-b-june-2026-boundary-validation-update-and-remediation)
 of the audit report for full detail.
