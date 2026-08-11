@@ -119,10 +119,16 @@ func (round *base) getSSID() ([]byte, error) {
 	if err != nil {
 		return nil, round.WrapError(errors.New("read BigXj failed"), round.PartyID())
 	}
-	ssidList = append(ssidList, BigXjList...)                              // BigXj
-	ssidList = append(ssidList, big.NewInt(int64(round.number)))           // round number
-	ssidList = append(ssidList, round.temp.ssidNonce)                      // caller-supplied session nonce
-	ssidList = append(ssidList, new(big.Int).SetBytes(round.temp.message)) // message being signed
+	ssidList = append(ssidList, BigXjList...)                    // BigXj
+	ssidList = append(ssidList, big.NewInt(int64(round.number))) // round number
+	ssidList = append(ssidList, round.temp.ssidNonce)            // caller-supplied session nonce
+	// Bind a digest of the exact message bytes rather than
+	// new(big.Int).SetBytes(message): SetBytes drops leading zeros, so
+	// leading-zero-distinct messages — which NewLocalPartyWithBytes deliberately
+	// preserves and round_3 hashes into distinct signatures — would otherwise
+	// collapse to the same SSID under a reused nonce. SHA512_256 is
+	// length-sensitive and stays fixed-size for arbitrary-length EdDSA messages.
+	ssidList = append(ssidList, new(big.Int).SetBytes(common.SHA512_256(round.temp.message))) // message being signed
 	ssid := common.SHA512_256i(ssidList...).Bytes()
 
 	return ssid, nil

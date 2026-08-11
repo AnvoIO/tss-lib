@@ -54,6 +54,27 @@ func TestSSIDBindsTheMessage(t *testing.T) {
 		"two messages under one nonce must not share an SSID")
 	assert.Equal(t, P1.temp.ssid, P3.temp.ssid,
 		"the same message under the same nonce must reproduce the SSID")
+
+	// Leading-zero-distinct messages are DISTINCT: NewLocalPartyWithBytes exists
+	// to preserve them and round_3 hashes the exact bytes into distinct
+	// signatures, so under one reused nonce they must not share an SSID either. A
+	// big.Int SetBytes binding would collapse {0x01} and {0x00,0x01} to the same
+	// value; the binding must stay length-sensitive.
+	newBytesParty := func(msg []byte) *LocalParty {
+		keys, signPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold + 1)
+		require.NoError(t, err, "should load keygen fixtures")
+		params, pErr := tss.NewParameters(tss.Edwards(), tss.NewPeerContext(signPIDs), signPIDs[0], len(signPIDs), testThreshold)
+		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
+		outCh := make(chan tss.Message, len(signPIDs)+2)
+		endCh := make(chan *common.SignatureData, 1)
+		return NewLocalPartyWithBytes(msg, params, keys[0], outCh, endCh).(*LocalParty)
+	}
+	Z1, Z2 := newBytesParty([]byte{0x01}), newBytesParty([]byte{0x00, 0x01})
+	require.Nil(t, Z1.Start())
+	require.Nil(t, Z2.Start())
+	assert.NotEqual(t, Z1.temp.ssid, Z2.temp.ssid,
+		"messages differing only in leading zeros must not share an SSID")
 }
 
 type invalidInjectionMode uint8
