@@ -18,6 +18,22 @@ import (
 	"github.com/AnvoIO/tss-lib/v4/crypto/paillier"
 )
 
+// alphaPrmInRange reports whether a decrypted MtA plaintext lies within the
+// range a protocol-conforming counterparty can produce, [0, q^6).
+//
+// The range proofs verified beforehand bound the magnitude of the prover's
+// responses, which is not the same as bounding the value that comes back out of
+// the decryption, so the output is checked directly. A conforming run yields
+// alphaPrm = a*b + betaPrm < q^2 + q^5 < q^6 (~1536 bits), while the Paillier
+// modulus is at least 2^2047, so the cut has wide margin on both sides.
+func alphaPrmInRange(alphaPrm, q *big.Int) bool {
+	if alphaPrm == nil || alphaPrm.Sign() < 0 {
+		return false
+	}
+	q6 := new(big.Int).Exp(q, big.NewInt(6), nil)
+	return alphaPrm.Cmp(q6) < 0
+}
+
 func AliceInit(
 	Session []byte,
 	ec elliptic.Curve,
@@ -118,6 +134,13 @@ func AliceEnd(
 		return nil, err
 	}
 	q := ec.Params().N
+	// The verified proof bounds the prover's responses, not the decrypted
+	// output. Reject a plaintext outside [0, q^6) — the range a protocol-
+	// conforming counterparty can produce — before it is reduced mod q, which
+	// would otherwise silently absorb an out-of-range value.
+	if !alphaPrmInRange(alphaPrm, q) {
+		return nil, errors.New("AliceEnd: decrypted share outside the expected range")
+	}
 	return new(big.Int).Mod(alphaPrm, q), nil
 }
 
@@ -138,5 +161,12 @@ func AliceEndWC(
 		return nil, err
 	}
 	q := ec.Params().N
+	// The verified proof bounds the prover's responses, not the decrypted
+	// output. Reject a plaintext outside [0, q^6) — the range a protocol-
+	// conforming counterparty can produce — before it is reduced mod q, which
+	// would otherwise silently absorb an out-of-range value.
+	if !alphaPrmInRange(alphaPrm, q) {
+		return nil, errors.New("AliceEndWC: decrypted share outside the expected range")
+	}
 	return new(big.Int).Mod(alphaPrm, q), nil
 }
