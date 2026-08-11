@@ -43,7 +43,35 @@ func NewLocalPartySaveData(partyCount int) (saveData LocalPartySaveData) {
 	return
 }
 
+// copyLocalSecrets returns a LocalSecrets whose *big.Int fields are fresh, so the
+// result shares no mutable state with s. A nil field stays nil rather than
+// becoming a zero-valued big.Int, so callers can still distinguish "absent" from
+// "zero".
+func copyLocalSecrets(s LocalSecrets) LocalSecrets {
+	out := LocalSecrets{}
+	if s.Xi != nil {
+		out.Xi = new(big.Int).Set(s.Xi)
+	}
+	if s.ShareID != nil {
+		out.ShareID = new(big.Int).Set(s.ShareID)
+	}
+	return out
+}
+
 // BuildLocalSaveDataSubset re-creates the LocalPartySaveData to contain data for only the list of signing parties.
+//
+// LocalSecrets is DEEP-COPIED, not assigned. Its fields (Xi, ShareID) are
+// *big.Int, so a plain struct assignment would leave the returned value sharing
+// the caller's numbers, and anything this library writes through them would reach
+// the caller's own save data. Resharing round 5 does exactly that on the
+// old-committee path (round.input.Xi.SetInt64(0)), silently corrupting the
+// caller's share through the alias.
+//
+// LocalSecrets is the ONLY thing copied; it is the only secret material. Everything
+// else in the returned value is shared with the caller: EDDSAPub is the caller's
+// pointer, and while Ks/BigXj are freshly allocated slices, the elements they hold
+// are the caller's pointers. If this library ever writes through any of it, extend
+// the copy first.
 func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.SortedPartyIDs) LocalPartySaveData {
 	keysToIndices := make(map[string]int, len(sourceData.Ks))
 	for j, kj := range sourceData.Ks {
@@ -53,7 +81,7 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 		keysToIndices[hex.EncodeToString(kj.Bytes())] = j
 	}
 	newData := NewLocalPartySaveData(sortedIDs.Len())
-	newData.LocalSecrets = sourceData.LocalSecrets
+	newData.LocalSecrets = copyLocalSecrets(sourceData.LocalSecrets)
 	newData.EDDSAPub = sourceData.EDDSAPub
 	for j, id := range sortedIDs {
 		savedIdx, ok := keysToIndices[hex.EncodeToString(id.Key)]
