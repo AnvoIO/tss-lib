@@ -148,6 +148,7 @@ func NewKGRound2Message2(
 	from *tss.PartyID,
 	deCommitment cmt.HashDeCommitment,
 	proof *modproof.ProofMod,
+	nTildeProof *modproof.ProofMod,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:        from,
@@ -159,6 +160,10 @@ func NewKGRound2Message2(
 		DeCommitment: dcBzs,
 		ModProof:     proofBzs[:],
 	}
+	if nTildeProof != nil {
+		nTildeProofBzs := nTildeProof.Bytes()
+		content.NTildeModProof = nTildeProofBzs[:]
+	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
 }
@@ -166,8 +171,10 @@ func NewKGRound2Message2(
 func (m *KGRound2Message2) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyMultiBytes(m.GetDeCommitment())
-	// This is commented for backward compatibility, which msg has no proof
-	// && common.NonEmptyMultiBytes(m.GetModProof(), modproof.ProofModBytesParts)
+	// ModProof and NTildeModProof byte-part counts are NOT enforced here for
+	// backward compatibility with peers that pre-date the proof additions.
+	// Recipients fall back to NoProofMod()-style behavior when a proof is
+	// missing; see round_3.go for the verification gating.
 }
 
 func (m *KGRound2Message2) UnmarshalDeCommitment() []*big.Int {
@@ -177,6 +184,13 @@ func (m *KGRound2Message2) UnmarshalDeCommitment() []*big.Int {
 
 func (m *KGRound2Message2) UnmarshalModProof() (*modproof.ProofMod, error) {
 	return modproof.NewProofFromBytes(m.GetModProof())
+}
+
+// UnmarshalNTildeModProof returns the ModProof attesting that the peer's
+// NTilde is a Blum integer (square-free product of safe primes). May return
+// an error if the peer did not ship this proof (pre-rollout compatibility).
+func (m *KGRound2Message2) UnmarshalNTildeModProof() (*modproof.ProofMod, error) {
+	return modproof.NewProofFromBytes(m.GetNTildeModProof())
 }
 
 // ----- //

@@ -202,10 +202,6 @@ func TestE2EConcurrentAndSaveFixtures(t *testing.T) {
 		params, err := tss.NewParameters(tss.S256(), p2pCtx, pIDs[i], len(pIDs), threshold)
 		assert.NoError(t, err)
 		params.SetSessionNonce(big.NewInt(1))
-		// do not use in untrusted setting
-		params.SetNoProofMod()
-		// do not use in untrusted setting
-		params.SetNoProofFac()
 		if i < len(fixtures) {
 			P = NewLocalParty(params, outCh, endCh, fixtures[i].LocalPreParams).(*LocalParty)
 		} else {

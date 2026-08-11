@@ -139,6 +139,10 @@ func (round *round2) Start() *tss.Error {
 
 	// 7. BROADCAST de-commitments of Shamir poly*G
 	modProof := &modproof.ProofMod{W: zero, X: *new([80]*big.Int), A: zero, B: zero, Z: *new([80]*big.Int)}
+	// nTildeModProof attests that the prover's own NTilde is a Blum-integer
+	// product of safe primes — blocking smooth-subgroup NTilde injection that
+	// the 2048-bit BitLen check in round 2 cannot detect.
+	var nTildeModProof *modproof.ProofMod
 	if !round.Parameters.NoProofMod() {
 		var err error
 		modProof, err = modproof.NewProof(ContextI, round.save.PaillierSK.N,
@@ -146,8 +150,20 @@ func (round *round2) Start() *tss.Error {
 		if err != nil {
 			return round.WrapError(err, round.PartyID())
 		}
+		// NTilde = (2p+1)(2q+1); LocalPreParams.P, Q store the Germain primes
+		// p, q (used for the DLN proof's subgroup order), NOT the safe-prime
+		// factors of NTilde. Derive the safe primes 2p+1, 2q+1 here so the
+		// ModProof is built from the actual factors of NTilde.
+		one := big.NewInt(1)
+		safePrimeP := new(big.Int).Add(new(big.Int).Lsh(round.save.LocalPreParams.P, 1), one)
+		safePrimeQ := new(big.Int).Add(new(big.Int).Lsh(round.save.LocalPreParams.Q, 1), one)
+		nTildeModProof, err = modproof.NewProof(ContextI, round.save.NTildei,
+			safePrimeP, safePrimeQ, round.Rand())
+		if err != nil {
+			return round.WrapError(err, round.PartyID())
+		}
 	}
-	r2msg2 := NewKGRound2Message2(round.PartyID(), round.temp.deCommitPolyG, modProof)
+	r2msg2 := NewKGRound2Message2(round.PartyID(), round.temp.deCommitPolyG, modProof, nTildeModProof)
 	round.temp.kgRound2Message2s[i] = r2msg2
 	round.out <- r2msg2
 

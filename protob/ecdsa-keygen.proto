@@ -35,6 +35,9 @@ message KGRound2Message1 {
 message KGRound2Message2 {
     repeated bytes de_commitment = 1;
     repeated bytes modProof = 2;
+    // Mod proof for NTilde — proves the prover's NTilde is a square-free
+    // Blum integer, blocking smooth-subgroup attacks.
+    repeated bytes nTildeModProof = 3;
 }
 
 /*

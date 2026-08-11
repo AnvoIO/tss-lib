@@ -175,11 +175,14 @@ func (x *KGRound2Message1) GetFacProof() [][]byte {
 
 // Represents a BROADCAST message sent to each party during Round 2 of the ECDSA TSS keygen protocol.
 type KGRound2Message2 struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	DeCommitment  [][]byte               `protobuf:"bytes,1,rep,name=de_commitment,json=deCommitment,proto3" json:"de_commitment,omitempty"`
-	ModProof      [][]byte               `protobuf:"bytes,2,rep,name=modProof,proto3" json:"modProof,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	DeCommitment [][]byte               `protobuf:"bytes,1,rep,name=de_commitment,json=deCommitment,proto3" json:"de_commitment,omitempty"`
+	ModProof     [][]byte               `protobuf:"bytes,2,rep,name=modProof,proto3" json:"modProof,omitempty"`
+	// Mod proof for NTilde — proves the prover's NTilde is a square-free
+	// Blum integer, blocking smooth-subgroup attacks.
+	NTildeModProof [][]byte `protobuf:"bytes,3,rep,name=nTildeModProof,proto3" json:"nTildeModProof,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *KGRound2Message2) Reset() {
@@ -222,6 +225,13 @@ func (x *KGRound2Message2) GetDeCommitment() [][]byte {
 func (x *KGRound2Message2) GetModProof() [][]byte {
 	if x != nil {
 		return x.ModProof
+	}
+	return nil
+}
+
+func (x *KGRound2Message2) GetNTildeModProof() [][]byte {
+	if x != nil {
+		return x.NTildeModProof
 	}
 	return nil
 }
@@ -291,10 +301,11 @@ const file_protob_ecdsa_keygen_proto_rawDesc = "" +
 	"dlnproof_2\x18\a \x03(\fR\tdlnproof2\"D\n" +
 	"\x10KGRound2Message1\x12\x14\n" +
 	"\x05share\x18\x01 \x01(\fR\x05share\x12\x1a\n" +
-	"\bfacProof\x18\x02 \x03(\fR\bfacProof\"S\n" +
+	"\bfacProof\x18\x02 \x03(\fR\bfacProof\"{\n" +
 	"\x10KGRound2Message2\x12#\n" +
 	"\rde_commitment\x18\x01 \x03(\fR\fdeCommitment\x12\x1a\n" +
-	"\bmodProof\x18\x02 \x03(\fR\bmodProof\"8\n" +
+	"\bmodProof\x18\x02 \x03(\fR\bmodProof\x12&\n" +
+	"\x0enTildeModProof\x18\x03 \x03(\fR\x0enTildeModProof\"8\n" +
 	"\x0fKGRound3Message\x12%\n" +
 	"\x0epaillier_proof\x18\x01 \x03(\fR\rpaillierProofB\x0eZ\fecdsa/keygenb\x06proto3"
 
