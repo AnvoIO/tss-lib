@@ -27,6 +27,16 @@ Applications must provide:
 
 `ParseWireMessage` rejects messages larger than 4 MiB. Transports should enforce an equal or smaller limit before buffering a complete message.
 
+### NTilde setup scope
+
+The ECDSA NTilde `ProofMod` proves the Blum-integer shape covered by that
+protocol. It does not prove that the hidden factors are safe primes, balanced,
+or have non-smooth group order; those factors are not inputs to the verifier.
+The two-directional DLN proofs separately establish that each peer's `h1` and
+`h2` generate the same subgroup. Deployments whose threat model requires a
+malicious peer to prove the stronger hidden-factor properties need an
+independently reviewed setup/proof extension; v4.0.1 does not provide one.
+
 ## Release and maintenance controls
 
 Security-relevant releases should satisfy all of the following:

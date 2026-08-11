@@ -46,6 +46,21 @@ func TestCheckIndexesZero(t *testing.T) {
 	assert.Error(t, e)
 }
 
+func TestCheckIndexesRejectsMalformedInputs(t *testing.T) {
+	assert.NotPanics(t, func() {
+		_, err := CheckIndexes(nil, []*big.Int{big.NewInt(1)})
+		assert.Error(t, err)
+	})
+	assert.NotPanics(t, func() {
+		_, err := CheckIndexes(tss.EC(), []*big.Int{nil})
+		assert.Error(t, err)
+	})
+	assert.NotPanics(t, func() {
+		_, err := CheckIndexes(tss.EC(), []*big.Int{big.NewInt(-1)})
+		assert.Error(t, err)
+	})
+}
+
 func TestCreate(t *testing.T) {
 	num, threshold := 5, 3
 
@@ -155,6 +170,32 @@ func TestCreateRejectsMalformedInputs(t *testing.T) {
 		_, _, err := Create(tss.EC(), 2, secret, ids, rand.Reader)
 		assert.NoError(tt, err)
 	})
+	t.Run("zero secret", func(tt *testing.T) {
+		assert.NotPanics(tt, func() {
+			_, _, err := Create(tss.EC(), 1, big.NewInt(0), ids, rand.Reader)
+			assert.Error(tt, err)
+		})
+	})
+	t.Run("order-multiple secret", func(tt *testing.T) {
+		assert.NotPanics(tt, func() {
+			_, _, err := Create(tss.EC(), 1, new(big.Int).Set(q), ids, rand.Reader)
+			assert.Error(tt, err)
+		})
+	})
+	t.Run("nil party index", func(tt *testing.T) {
+		badIDs := []*big.Int{ids[0], nil, ids[2]}
+		assert.NotPanics(tt, func() {
+			_, _, err := Create(tss.EC(), 1, secret, badIDs, rand.Reader)
+			assert.Error(tt, err)
+		})
+	})
+	t.Run("overflowing threshold", func(tt *testing.T) {
+		maxInt := int(^uint(0) >> 1)
+		assert.NotPanics(tt, func() {
+			_, _, err := Create(tss.EC(), maxInt, secret, ids, rand.Reader)
+			assert.Equal(tt, ErrNumSharesBelowThreshold, err)
+		})
+	})
 }
 
 // TestVerifyRejectsCurveMismatch is a regression test for the VSS Verify
@@ -181,6 +222,19 @@ func TestVerifyRejectsCurveMismatch(t *testing.T) {
 	copy(tampered, vs)
 	tampered[0] = mismatched
 	assert.False(t, shares[0].Verify(tss.EC(), threshold, tampered))
+}
+
+func TestVerifyRejectsNonCanonicalIDWithoutPanic(t *testing.T) {
+	q := tss.EC().Params().N
+	secret := common.GetRandomPositiveInt(rand.Reader, q)
+	ids := []*big.Int{big.NewInt(1), big.NewInt(2)}
+	vs, shares, err := Create(tss.EC(), 1, secret, ids, rand.Reader)
+	assert.NoError(t, err)
+
+	bad := &Share{Threshold: shares[0].Threshold, ID: new(big.Int).Set(q), Share: shares[0].Share}
+	assert.NotPanics(t, func() {
+		assert.False(t, bad.Verify(tss.EC(), 1, vs))
+	})
 }
 
 // TestReConstructRejectsMalformedInputs is a regression test for the VSS
@@ -216,6 +270,15 @@ func TestReConstructRejectsMalformedInputs(t *testing.T) {
 		bad[1] = nil
 		_, err := bad.ReConstruct(tss.EC())
 		assert.Error(tt, err)
+	})
+	t.Run("nil first share element", func(tt *testing.T) {
+		bad := make(Shares, threshold+1)
+		copy(bad, shares[:threshold+1])
+		bad[0] = nil
+		assert.NotPanics(tt, func() {
+			_, err := bad.ReConstruct(tss.EC())
+			assert.Error(tt, err)
+		})
 	})
 	t.Run("mixed threshold", func(tt *testing.T) {
 		bad := make(Shares, threshold+1)

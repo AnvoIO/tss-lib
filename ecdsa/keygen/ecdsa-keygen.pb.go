@@ -178,8 +178,9 @@ type KGRound2Message2 struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	DeCommitment [][]byte               `protobuf:"bytes,1,rep,name=de_commitment,json=deCommitment,proto3" json:"de_commitment,omitempty"`
 	ModProof     [][]byte               `protobuf:"bytes,2,rep,name=modProof,proto3" json:"modProof,omitempty"`
-	// Mod proof for NTilde — proves the prover's NTilde is a square-free
-	// Blum integer, blocking smooth-subgroup attacks.
+	// ModProof over NTilde, attesting Blum-integer shape. It does not prove
+	// safe-primality of the factors or exclude a smooth group order; the
+	// factors are not statement inputs to ProofMod.Verify.
 	NTildeModProof [][]byte `protobuf:"bytes,3,rep,name=nTildeModProof,proto3" json:"nTildeModProof,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache

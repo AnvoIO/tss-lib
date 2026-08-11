@@ -46,6 +46,8 @@ func TestBuildLocalSaveDataSubsetDeepCopiesLocalSecrets(t *testing.T) {
 func TestBuildLocalSaveDataSubsetMissingSignerDoesNotPanic(t *testing.T) {
 	source := NewLocalPartySaveData(1)
 	source.Ks[0] = big.NewInt(999) // does not match generated party id key
+	source.Xi = big.NewInt(0xC0FFEE)
+	source.ShareID = big.NewInt(0xBEEF)
 
 	ids := tss.GenerateTestPartyIDs(1)
 
@@ -53,5 +55,11 @@ func TestBuildLocalSaveDataSubsetMissingSignerDoesNotPanic(t *testing.T) {
 		got := BuildLocalSaveDataSubset(source, ids)
 		assert.Equal(t, source.Ks, got.Ks)
 		assert.Equal(t, len(source.Ks), len(got.Ks))
+		got.Xi.SetInt64(0)
+		got.ShareID.SetInt64(0)
+		assert.Equal(t, int64(0xC0FFEE), source.Xi.Int64(),
+			"missing-signer fallback must not alias Xi")
+		assert.Equal(t, int64(0xBEEF), source.ShareID.Int64(),
+			"missing-signer fallback must not alias ShareID")
 	})
 }

@@ -107,9 +107,11 @@ func (round *round4) Start() *tss.Error {
 				return
 			}
 			// Verify the ModProof for the peer's NTilde. Mirrors the keygen-side
-			// check in keygen/round_3.go. Closes the smooth-subgroup NTilde
-			// injection path for resharing — the peer's saved NTilde/H1/H2 (set
-			// below) is now bound to a Blum-integer-product attestation.
+			// check in keygen/round_3.go and attests Blum-integer shape only. It
+			// does not prove safe-primality of the factors, exclude a smooth group
+			// order, or bind H1/H2, because those are not statement inputs to
+			// ProofMod.Verify. The two-directional DLN proofs below separately
+			// establish that H1 and H2 span the same subgroup.
 			//
 			// Backward compatibility: peers built against the pre-v4
 			// DGRound2Message1 (no nTildeModProof field) ship empty bytes; treat

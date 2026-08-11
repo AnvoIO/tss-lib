@@ -39,8 +39,12 @@ type (
 // ProveBobWC implements Bob's proof both with or without check "ProveMtawc_Bob" and "ProveMta_Bob" used in the MtA protocol from GG18Spec (9) Figs. 10 & 11.
 // an absent `X` generates the proof without the X consistency check X = g^x
 func ProveBobWC(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTilde, h1, h2, c1, c2, x, y, r *big.Int, X *crypto.ECPoint, rand io.Reader) (*ProofBobWC, error) {
-	if pk == nil || NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil || x == nil || y == nil || r == nil {
+	if ec == nil || ec.Params() == nil || ec.Params().N == nil || pk == nil || pk.N == nil || rand == nil ||
+		NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil || x == nil || y == nil || r == nil {
 		return nil, errors.New("ProveBob() received a nil argument")
+	}
+	if X != nil && (!tss.SameCurve(ec, X.Curve()) || !X.ValidateInSubgroup()) {
+		return nil, errors.New("ProveBobWC() received an invalid X")
 	}
 
 	NSquared := pk.NSquare()
@@ -199,11 +203,17 @@ func ProofBobFromBytes(bzs [][]byte) (*ProofBob, error) {
 // an absent `X` verifies a proof generated without the X consistency check X = g^x
 func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTilde, h1, h2, c1, c2 *big.Int, X *crypto.ECPoint) bool {
 	if pf == nil || pf.ProofBob == nil || !pf.ProofBob.ValidateBasic() ||
-		ec == nil || pk == nil || pk.N == nil || NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil {
+		ec == nil || ec.Params() == nil || ec.Params().N == nil || pk == nil || pk.N == nil ||
+		NTilde == nil || h1 == nil || h2 == nil || c1 == nil || c2 == nil {
 		return false
 	}
-	if X != nil && pf.U == nil {
-		return false
+	if X != nil {
+		// Validate both attacker-controlled points, including their curve
+		// assignments, before the transcript hash dereferences coordinates.
+		if pf.U == nil || !tss.SameCurve(ec, X.Curve()) || !tss.SameCurve(ec, pf.U.Curve()) ||
+			!X.ValidateInSubgroup() || !pf.U.ValidateInSubgroup() {
+			return false
+		}
 	}
 	// pk.N and NTilde must be plausible unknown-order moduli before any modular
 	// arithmetic runs. NTilde and the public generators h1, h2 arrive from the
@@ -319,9 +329,6 @@ func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.Pub
 		if X == nil {
 			eHash = common.SHA512_256i_TAGGED(fsSessionBob(Session), append(pk.AsInts(), NTilde, h1, h2, c1, c2, pf.Z, pf.ZPrm, pf.T, pf.V, pf.W)...)
 		} else {
-			if !tss.SameCurve(ec, X.Curve()) {
-				return false
-			}
 			eHash = common.SHA512_256i_TAGGED(fsSessionBobWC(Session), append(pk.AsInts(), NTilde, h1, h2, X.X(), X.Y(), c1, c2, pf.U.X(), pf.U.Y(), pf.Z, pf.ZPrm, pf.T, pf.V, pf.W)...)
 		}
 		e = common.RejectionSample(q, eHash)
@@ -331,16 +338,6 @@ func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.Pub
 
 	// 4. runs only in the "with check" mode from Fig. 10
 	if X != nil {
-		// X and pf.U arrive from the peer (or a direct-API caller that can build
-		// malformed ECPoints via NewECPointNoCurveCheck). Require prime-order
-		// subgroup membership: ValidateInSubgroup is ValidateBasic plus a
-		// [curve.N]*P == identity check on composite-cofactor curves (e.g.
-		// Ed25519), where on-curve membership alone admits small-order points.
-		// The existing same-curve guard (in the challenge-hash block above) and
-		// the checked scalar-mults below still handle cross-curve / e==0 cases.
-		if !X.ValidateInSubgroup() || !pf.U.ValidateInSubgroup() {
-			return false
-		}
 		// pf.S1 is peer-supplied; S1 ≡ 0 (mod q) drives ScalarBaseMult to the point
 		// at infinity, which would panic. Use the checked variants and reject
 		// instead. e is a hash challenge (≈never 0), checked for uniformity.

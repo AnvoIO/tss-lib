@@ -83,6 +83,11 @@ func sampleYModN(Session []byte, N *big.Int, transcript []*big.Int) *big.Int {
 }
 
 type (
+	// ProofMod is a proof over the public modulus N. Its verifier receives no
+	// factorization and therefore attests only the Blum-integer shape covered by
+	// this protocol. It does not prove that N's prime factors are safe primes,
+	// that their (p-1)/2 halves are prime, that the factors are balanced, or that
+	// the multiplicative-group order is not smooth.
 	ProofMod struct {
 		W *big.Int
 		X [Iterations]*big.Int

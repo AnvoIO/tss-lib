@@ -186,9 +186,12 @@ func (m *KGRound2Message2) UnmarshalModProof() (*modproof.ProofMod, error) {
 	return modproof.NewProofFromBytes(m.GetModProof())
 }
 
-// UnmarshalNTildeModProof returns the ModProof attesting that the peer's
-// NTilde is a Blum integer (square-free product of safe primes). May return
-// an error if the peer did not ship this proof (pre-rollout compatibility).
+// UnmarshalNTildeModProof returns the peer's ModProof over NTilde. The proof
+// attests Blum-integer shape, but does not prove safe-primality of NTilde's
+// factors or exclude a smooth group order; those factor properties are not
+// statement inputs to ProofMod.Verify. The two-directional DLN proof pair
+// separately establishes that h1 and h2 generate the same subgroup. May return
+// an error if the peer did not ship this proof (insecure_noproofs compatibility).
 func (m *KGRound2Message2) UnmarshalNTildeModProof() (*modproof.ProofMod, error) {
 	return modproof.NewProofFromBytes(m.GetNTildeModProof())
 }

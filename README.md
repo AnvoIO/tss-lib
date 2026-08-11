@@ -15,36 +15,42 @@ Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security
 
 ## Release line
 
-This source tree is the breaking v4 release line, published concurrently with v3.1.0:
+This source tree is the breaking v4 release line. v4.0.1 is currently a release
+candidate planned for publication alongside v3.1.1:
 
 - Go module: `github.com/AnvoIO/tss-lib/v4`
-- Release branch: `release/v4.0.0`
-- First release: `v4.0.0`
+- Release branch: `release/v4.0.1`
+- Candidate status: security review and remediation complete; final signed release tag pending
+- Adoption target: `v4.0.1` (`v4.0.0` was not rolled out and is retracted)
 
 The v3 API is not bundled into the v4 source tree. It remains available and
-maintained independently through the `v3.1.0` tag and the
-`release/v3.1.0` branch using module path
+maintained independently through the `v3.1.0` tag and the v3.1.1 candidate on
+the `release/v3.1.1` branch using module path
 `github.com/AnvoIO/tss-lib/v3`. Releasing v4 does not delete or invalidate
 tagged v3 source or existing v3 module downloads.
 
 Choose the major version through the Go import path. Do not mix v3 and v4
-participants in one keygen, signing, or resharing session. Although v4 does not
-add protobuf fields relative to v3.1, its mandatory session nonce and stricter
-API contracts form a coordinated migration boundary.
+participants in one keygen, signing, or resharing session. v4.0.1 adds mandatory
+NTilde ModProof fields to keygen and resharing and changes every proof transcript;
+its mandatory session nonce and stricter API contracts also form a coordinated
+migration boundary.
 
-### v3.1.0 compared with v4.0.0
+### v3.1.1 compared with v4.0.1
 
-| Area | v3.1.0 | v4.0.0 |
+| Area | v3.1.1 | v4.0.1 |
 | --- | --- | --- |
-| Release intent | Wire-compatible v3 maintenance | Breaking migration |
+| Release intent | Wire-compatible v3 security maintenance | Breaking v4 security hardening |
 | Go module | `github.com/AnvoIO/tss-lib/v3` | `github.com/AnvoIO/tss-lib/v4` |
 | Session nonce | Optional legacy fallback; fresh positive nonce strongly recommended | Fresh positive coordinated nonce required before `Party.Start()` |
 | Party identities | Reference-backed; callers must treat contexts and IDs as immutable | Constructor snapshots and identity accessors are defensive deep copies; `SetIDs` removed |
 | Public `Party` API | Low-level validation/storage/round hooks remain exposed but are not concurrent application entry points | Public interface narrowed to serialized lifecycle/update and concurrency-safe status/error operations |
-| Wire and transcript | v3 protobuf format and legacy transcript fallback retained | Same protobuf fields as v3.1, but mandatory nonce changes transcript acceptance |
+| Proof transcripts | Unchanged from the v3 line | Per-proof-type domain separation, uniform ModProof sampling, and message-bound signing SSID |
+| Keygen/resharing wire | Unchanged from the v3 line | New mandatory NTilde ModProof field |
 | Session deployment | Use only v3 participants | Use only v4 participants; migrate every party together |
 
-Both versions remain available from their separate tags and maintenance branches.
+Existing releases remain available from their tags; the v3.1.1 and v4.0.1
+candidates are maintained on separate release branches until their signed
+annotated release tags are cut.
 
 ## Features
 
@@ -58,7 +64,7 @@ Both versions remain available from their separate tags and maintenance branches
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.25.12 or later (use a currently supported, patched Go toolchain)
 - Protocol Buffers compiler (for regenerating wire format, not required to build)
 
 ## Building

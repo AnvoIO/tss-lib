@@ -105,12 +105,14 @@ func (round *round3) Start() *tss.Error {
 					return
 				}
 			}
-			// Verify the ModProof for the peer's NTilde. The proof attests
-			// NTildej is a Blum-integer product of safe primes — closes the
-			// smooth-subgroup NTilde injection path that the existing 2048-bit
-			// BitLen check cannot detect. Backward compatibility mirrors the
-			// Paillier ModProof above: peers that pre-date this field ship an
-			// empty NTildeModProof and are tolerated under NoProofMod().
+			// Verify the ModProof for the peer's NTilde. It attests the
+			// modulus's Blum-integer shape, but does not prove safe-primality of
+			// its factors or exclude a smooth group order: ProofMod.Verify
+			// receives only NTilde, not its factors. It also does not bind h1 or
+			// h2; the two-directional DLN proofs verified in round 2 establish
+			// that those generators span the same subgroup. In secure builds the
+			// proof is mandatory; empty proofs are tolerated only by the explicit
+			// insecure_noproofs build.
 			nTildeModProof, err := r2msg2.UnmarshalNTildeModProof()
 			if err != nil && round.Parameters.NoProofMod() {
 				common.Logger.Warningf("nTildeModProof not exist:%s", Ps[j])

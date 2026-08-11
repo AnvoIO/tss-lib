@@ -122,9 +122,13 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 	for j, id := range sortedIDs {
 		savedIdx, ok := keysToIndices[hex.EncodeToString(id.Key)]
 		if !ok {
-			// Do not panic in constructor paths; return original data so callers can fail gracefully later.
+			// Do not panic in constructor paths. Preserve the historical fallback
+			// shape so callers can fail gracefully later, but retain the deep-copy
+			// guarantee for mutable local secrets on every return path.
 			common.Logger.Errorf("BuildLocalSaveDataSubset: unable to find signer in local save data for id=%x", id.Key)
-			return sourceData
+			fallback := sourceData
+			fallback.LocalSecrets = copyLocalSecrets(sourceData.LocalSecrets)
+			return fallback
 		}
 		newData.Ks[j] = sourceData.Ks[savedIdx]
 		newData.NTildej[j] = sourceData.NTildej[savedIdx]

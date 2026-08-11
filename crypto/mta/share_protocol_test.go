@@ -55,6 +55,11 @@ func TestShareProtocol(t *testing.T) {
 
 	alpha, err := AliceEnd(Session, tss.EC(), pk, pfB, h1i, h2i, cA, cB, NTildei, sk)
 	assert.NoError(t, err)
+	assert.NotPanics(t, func() {
+		alphaWithNilKey, nilKeyErr := AliceEnd(Session, tss.EC(), pk, pfB, h1i, h2i, cA, cB, NTildei, nil)
+		assert.Error(t, nilKeyErr)
+		assert.Nil(t, alphaWithNilKey)
+	})
 
 	// expect: alpha = ab + betaPrm
 	aTimesB := new(big.Int).Mul(a, b)

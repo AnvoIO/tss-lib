@@ -125,13 +125,22 @@ func (p *BaseParty) WrapError(err error, culprits ...*PartyID) *Error {
 
 // an implementation of ValidateMessage that is shared across the different types of parties (keygen, signing, dynamic groups)
 func (p *BaseParty) ValidateMessage(msg ParsedMessage) (bool, *Error) {
-	if msg == nil || msg.Content() == nil {
-		return false, p.WrapError(fmt.Errorf("received nil msg: %s", msg))
+	if msg == nil {
+		return false, p.WrapError(errors.New("received nil msg"))
+	}
+	if msg.Content() == nil {
+		// Do not format msg here: MessageImpl.String dereferences its content and
+		// wire metadata, which are precisely the fields this boundary is
+		// validating and may be nil on a directly constructed ParsedMessage.
+		return false, p.WrapError(errors.New("received msg with nil content"))
 	}
 	if msg.GetFrom() == nil || !msg.GetFrom().ValidateBasic() {
-		return false, p.WrapError(fmt.Errorf("received msg with an invalid sender: %s", msg))
+		return false, p.WrapError(errors.New("received msg with an invalid sender"))
 	}
 	if !msg.ValidateBasic() {
+		if msg.WireMsg() == nil {
+			return false, p.WrapError(errors.New("message failed ValidateBasic"), msg.GetFrom())
+		}
 		return false, p.WrapError(fmt.Errorf("message failed ValidateBasic: %s", msg), msg.GetFrom())
 	}
 	return true, nil

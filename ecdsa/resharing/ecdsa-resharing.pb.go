@@ -106,9 +106,9 @@ type DGRound2Message1 struct {
 	H2         []byte                 `protobuf:"bytes,5,opt,name=h2,proto3" json:"h2,omitempty"`
 	Dlnproof_1 [][]byte               `protobuf:"bytes,6,rep,name=dlnproof_1,json=dlnproof1,proto3" json:"dlnproof_1,omitempty"`
 	Dlnproof_2 [][]byte               `protobuf:"bytes,7,rep,name=dlnproof_2,json=dlnproof2,proto3" json:"dlnproof_2,omitempty"`
-	// ModProof attesting that n_tilde is a Blum integer (product of two
-	// safe primes). Added in v4 to close the smooth-subgroup NTilde
-	// injection path that DLN proofs alone cannot detect.
+	// ModProof over n_tilde, attesting Blum-integer shape. It does not prove
+	// safe-primality of the factors or exclude a smooth group order; the
+	// factors are not statement inputs to ProofMod.Verify.
 	// Empty when the generator party ran with NoProofMod() compat mode; the
 	// verifier treats an unparseable proof as a warn-only fallback under
 	// NoProofMod(), or as a hard reject otherwise.

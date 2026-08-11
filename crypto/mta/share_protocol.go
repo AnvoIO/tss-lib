@@ -126,6 +126,9 @@ func AliceEnd(
 	h1A, h2A, cA, cB, NTildeA *big.Int,
 	sk *paillier.PrivateKey,
 ) (*big.Int, error) {
+	if sk == nil || sk.N == nil || sk.LambdaN == nil || sk.PhiN == nil {
+		return nil, errors.New("AliceEnd: invalid Paillier private key")
+	}
 	if !pf.Verify(Session, ec, pkA, NTildeA, h1A, h2A, cA, cB) {
 		return nil, errors.New("ProofBob.Verify() returned false")
 	}
@@ -153,6 +156,9 @@ func AliceEndWC(
 	cA, cB, NTildeA, h1A, h2A *big.Int,
 	sk *paillier.PrivateKey,
 ) (*big.Int, error) {
+	if sk == nil || sk.N == nil || sk.LambdaN == nil || sk.PhiN == nil {
+		return nil, errors.New("AliceEndWC: invalid Paillier private key")
+	}
 	if !pf.Verify(Session, ec, pkA, NTildeA, h1A, h2A, cA, cB, B) {
 		return nil, errors.New("ProofBobWC.Verify() returned false")
 	}

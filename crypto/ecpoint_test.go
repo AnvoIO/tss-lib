@@ -164,7 +164,7 @@ func TestValidateInSubgroup(t *testing.T) {
 		p := NewECPointNoCurveCheck(edw, big.NewInt(0), big.NewInt(1))
 		assert.True(tt, p.IsIdentity())
 		assert.False(tt, p.ValidateInSubgroup(), "identity should fail the ValidateBasic gate")
-		assert.True(tt, p.IsInPrimeOrderSubgroup(), "[N]·identity == identity, so the raw subgroup query still returns true; rejection comes from ValidateBasic")
+		assert.False(tt, p.IsInPrimeOrderSubgroup(), "the public subgroup predicate must reject invalid/identity points")
 	})
 	t.Run("Edwards low-order point rejected", func(tt *testing.T) {
 		// (0, p-1) is the order-2 point on Ed25519.
@@ -287,6 +287,61 @@ func TestScalarMultCheckedRejectsPointAtInfinity(t *testing.T) {
 	assert.NotNil(t, got)
 	want := ScalarBaseMult(ec, big.NewInt(2)) // 2*G
 	assert.True(t, got.Equals(want), "2*G via ScalarMultChecked should equal ScalarBaseMult(2)")
+}
+
+func TestCheckedECAPIsRejectMalformedInputs(t *testing.T) {
+	ec := tss.S256()
+	G := ScalarBaseMult(ec, big.NewInt(1))
+	noCurve := NewECPointNoCurveCheck(nil, G.X(), G.Y())
+	nilCoord := NewECPointNoCurveCheck(ec, nil, G.Y())
+
+	assert.NotPanics(t, func() {
+		_, err := NewECPoint(nil, big.NewInt(1), big.NewInt(2))
+		assert.Error(t, err)
+	})
+	assert.NotPanics(t, func() {
+		assert.False(t, noCurve.ValidateBasic())
+		assert.False(t, noCurve.IsInPrimeOrderSubgroup())
+	})
+	for name, k := range map[string]*big.Int{
+		"nil":      nil,
+		"negative": big.NewInt(-1),
+	} {
+		t.Run("ScalarMultChecked/"+name, func(tt *testing.T) {
+			assert.NotPanics(tt, func() {
+				_, err := G.ScalarMultChecked(k)
+				assert.Error(tt, err)
+			})
+		})
+		t.Run("ScalarBaseMultChecked/"+name, func(tt *testing.T) {
+			assert.NotPanics(tt, func() {
+				_, err := ScalarBaseMultChecked(ec, k)
+				assert.Error(tt, err)
+			})
+		})
+	}
+	assert.NotPanics(t, func() {
+		_, err := ScalarBaseMultChecked(nil, big.NewInt(1))
+		assert.Error(t, err)
+	})
+	assert.NotPanics(t, func() {
+		_, err := noCurve.ScalarMultChecked(big.NewInt(1))
+		assert.Error(t, err)
+	})
+	assert.NotPanics(t, func() {
+		_, err := G.Add(noCurve)
+		assert.Error(t, err)
+	})
+	assert.NotPanics(t, func() {
+		ex, ey := tss.Edwards().ScalarBaseMult(big.NewInt(7).Bytes())
+		edwardsPoint := NewECPointNoCurveCheck(tss.Edwards(), ex, ey)
+		_, err := G.Add(edwardsPoint)
+		assert.Error(t, err)
+		assert.False(t, G.Equals(edwardsPoint))
+	})
+	assert.NotPanics(t, func() {
+		assert.False(t, G.Equals(nilCoord))
+	})
 }
 
 // TestECPointAddNilSafety is a regression test for SRC-2026-641: (*ECPoint).Add

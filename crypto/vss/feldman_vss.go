@@ -44,8 +44,17 @@ var (
 
 // Check share ids of Shamir's Secret Sharing, return error if duplicate or 0 value found
 func CheckIndexes(ec elliptic.Curve, indexes []*big.Int) ([]*big.Int, error) {
+	if ec == nil || ec.Params() == nil || ec.Params().N == nil || ec.Params().N.Sign() <= 0 {
+		return nil, errors.New("vss CheckIndexes: invalid curve or curve order")
+	}
 	visited := make(map[string]struct{})
-	for _, v := range indexes {
+	for i, v := range indexes {
+		if v == nil {
+			return nil, fmt.Errorf("vss CheckIndexes: nil party index at position %d", i)
+		}
+		if v.Sign() <= 0 {
+			return nil, fmt.Errorf("vss CheckIndexes: party index at position %d must be positive", i)
+		}
 		vMod := new(big.Int).Mod(v, ec.Params().N)
 		if vMod.Cmp(zero) == 0 {
 			return nil, errors.New("party index should not be 0")
@@ -62,7 +71,7 @@ func CheckIndexes(ec elliptic.Curve, indexes []*big.Int) ([]*big.Int, error) {
 // Returns a new array of secret shares created by Shamir's Secret Sharing Algorithm,
 // requiring a minimum number of shares to recreate, of length shares, from the input secret
 func Create(ec elliptic.Curve, threshold int, secret *big.Int, indexes []*big.Int, rand io.Reader) (Vs, Shares, error) {
-	if ec == nil || rand == nil {
+	if ec == nil || ec.Params() == nil || ec.Params().N == nil || ec.Params().N.Sign() <= 0 || rand == nil {
 		return nil, nil, fmt.Errorf("vss Create: ec or rand == nil")
 	}
 	if secret == nil || indexes == nil {
@@ -71,18 +80,22 @@ func Create(ec elliptic.Curve, threshold int, secret *big.Int, indexes []*big.In
 	if threshold < 1 {
 		return nil, nil, errors.New("vss threshold < 1")
 	}
-
-	ids, err := CheckIndexes(ec, indexes)
-	if err != nil {
-		return nil, nil, err
+	q := ec.Params().N
+	if secret.Sign() <= 0 || secret.Cmp(q) >= 0 {
+		return nil, nil, errors.New("vss secret must be in [1, q)")
 	}
 
 	num := len(indexes)
 	// Need at least threshold+1 distinct shares to reconstruct a
-	// degree-`threshold` polynomial; the old `num < threshold` check admitted
-	// num == threshold, producing an unreconstructable share set.
-	if num < threshold+1 {
+	// degree-`threshold` polynomial. Written as threshold >= num to avoid
+	// overflowing threshold+1 for an adversarially large int.
+	if threshold >= num {
 		return nil, nil, ErrNumSharesBelowThreshold
+	}
+
+	ids, err := CheckIndexes(ec, indexes)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	poly := samplePolynomial(ec, threshold, secret, rand)
@@ -101,9 +114,14 @@ func Create(ec elliptic.Curve, threshold int, secret *big.Int, indexes []*big.In
 }
 
 func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
-	if share == nil || ec == nil || ec.Params() == nil || share.ID == nil ||
-		share.ID.Sign() <= 0 || share.Threshold != threshold || threshold < 0 ||
+	if share == nil || ec == nil || ec.Params() == nil || ec.Params().N == nil ||
+		ec.Params().N.Sign() <= 0 || share.ID == nil || share.Threshold != threshold || threshold < 0 ||
 		vs == nil || len(vs) != threshold+1 {
+		return false
+	}
+	q := ec.Params().N
+	idModQ := new(big.Int).Mod(share.ID, q)
+	if share.ID.Sign() <= 0 || idModQ.Sign() == 0 {
 		return false
 	}
 	// Every vs[j] arrives from attacker-controlled wire bytes. Require it to
@@ -118,7 +136,6 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 	}
 	// reject non-canonical share scalar (must be in [0, q)) so a peer cannot
 	// pass verification with a value congruent to the real share modulo q.
-	q := ec.Params().N
 	if share.Share == nil || share.Share.Sign() < 0 || share.Share.Cmp(q) >= 0 {
 		return false
 	}
@@ -127,7 +144,7 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 	v, t := vs[0], one // YRO : we need to have our accumulator outside of the loop
 	for j := 1; j <= threshold; j++ {
 		// t = k_i^j
-		t = modQ.Mul(t, share.ID)
+		t = modQ.Mul(t, idModQ)
 		// v = v * v_j^t; vs[j] and v are already validated to live on ec above,
 		// so no SetCurve mutation is needed here.
 		vjt := vs[j].ScalarMult(t)
@@ -148,8 +165,8 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 }
 
 func (shares Shares) ReConstruct(ec elliptic.Curve) (secret *big.Int, err error) {
-	if ec == nil {
-		return nil, errors.New("vss ReConstruct: ec == nil")
+	if ec == nil || ec.Params() == nil || ec.Params().N == nil || ec.Params().N.Sign() <= 0 {
+		return nil, errors.New("vss ReConstruct: invalid curve or curve order")
 	}
 	if len(shares) == 0 {
 		return nil, ErrNumSharesBelowThreshold
@@ -158,7 +175,14 @@ func (shares Shares) ReConstruct(ec elliptic.Curve) (secret *big.Int, err error)
 	// non-nil IDs / Shares and a consistent threshold. Without these a non-nil
 	// but empty slice would panic on shares[0], and mixed-threshold or nil
 	// shares would nil-deref or silently mix distinct polynomials.
+	if shares[0] == nil {
+		return nil, errors.New("vss ReConstruct: nil share at index 0")
+	}
 	threshold := shares[0].Threshold
+	if threshold < 0 || threshold >= len(shares) {
+		return nil, ErrNumSharesBelowThreshold
+	}
+	q := ec.Params().N
 	for i, share := range shares {
 		if share == nil || share.ID == nil || share.Share == nil {
 			return nil, fmt.Errorf("vss ReConstruct: nil share or share field at index %d", i)
@@ -166,11 +190,14 @@ func (shares Shares) ReConstruct(ec elliptic.Curve) (secret *big.Int, err error)
 		if share.Threshold != threshold {
 			return nil, fmt.Errorf("vss ReConstruct: share %d has threshold %d, want %d", i, share.Threshold, threshold)
 		}
+		if share.ID.Sign() <= 0 || new(big.Int).Mod(share.ID, q).Sign() == 0 {
+			return nil, fmt.Errorf("vss ReConstruct: share %d has invalid ID", i)
+		}
+		if share.Share.Sign() < 0 || share.Share.Cmp(q) >= 0 {
+			return nil, fmt.Errorf("vss ReConstruct: share %d has non-canonical value", i)
+		}
 	}
-	if threshold+1 > len(shares) {
-		return nil, ErrNumSharesBelowThreshold
-	}
-	modN := common.ModInt(ec.Params().N)
+	modN := common.ModInt(q)
 
 	// x coords
 	xs := make([]*big.Int, 0, len(shares))

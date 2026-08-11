@@ -139,9 +139,12 @@ func (round *round2) Start() *tss.Error {
 
 	// 7. BROADCAST de-commitments of Shamir poly*G
 	modProof := &modproof.ProofMod{W: zero, X: *new([80]*big.Int), A: zero, B: zero, Z: *new([80]*big.Int)}
-	// nTildeModProof attests that the prover's own NTilde is a Blum-integer
-	// product of safe primes — blocking smooth-subgroup NTilde injection that
-	// the 2048-bit BitLen check in round 2 cannot detect.
+	// nTildeModProof is a proof over this party's own NTilde. It attests the
+	// modulus's Blum-integer shape, but not safe-primality of its factors or the
+	// absence of smooth group order: ProofMod.Verify receives only NTilde, not
+	// its factors. Honest local pre-parameter generation below does use safe
+	// primes. The two-directional DLN proofs separately bind h1 and h2 to the
+	// same subgroup.
 	var nTildeModProof *modproof.ProofMod
 	if !round.Parameters.NoProofMod() {
 		var err error

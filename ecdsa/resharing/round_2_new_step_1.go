@@ -107,12 +107,12 @@ func (round *round2) Start() *tss.Error {
 	dlnProof2 := dlnproof.NewDLNProof(round.temp.ssid, h2i, h1i, beta, p, q, NTildei, round.Rand())
 
 	modProof := &modproof.ProofMod{W: zero, X: *new([80]*big.Int), A: zero, B: zero, Z: *new([80]*big.Int)}
-	// nTildeModProof attests that this new-committee party's own NTilde is a
-	// Blum-integer product of safe primes — mirrors the keygen flow's
-	// KGRound2Message2.nTildeModProof and closes the smooth-subgroup NTilde
-	// injection path for resharing too. Generated the same way: derive the safe
-	// primes 2p+1, 2q+1 from LocalPreParams' Germain primes, then prove against
-	// NTildei.
+	// nTildeModProof mirrors the keygen proof over this new-committee party's
+	// own NTilde. It attests Blum-integer shape, not safe-primality of the
+	// factors or the absence of smooth group order, because ProofMod.Verify
+	// receives only NTilde. Honest local generation uses the safe primes 2p+1
+	// and 2q+1 derived from LocalPreParams' Germain primes. The two-directional
+	// DLN proofs separately bind h1 and h2 to the same subgroup.
 	var nTildeModProof *modproof.ProofMod
 	ContextI := append(round.temp.ssid, big.NewInt(int64(i)).Bytes()...)
 	if !round.Parameters.NoProofMod() {
