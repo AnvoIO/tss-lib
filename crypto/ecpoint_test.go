@@ -120,6 +120,69 @@ func TestUnFlattenECPoints(t *testing.T) {
 	}
 }
 
+func TestIsIdentityAndValidateBasic(t *testing.T) {
+	edw := edwards.Edwards()
+	tss.RegisterCurve("ed25519", edw)
+	t.Run("Edwards identity (0,1)", func(tt *testing.T) {
+		p := NewECPointNoCurveCheck(edw, big.NewInt(0), big.NewInt(1))
+		assert.True(tt, p.IsOnCurve(), "Edwards (0,1) is on-curve")
+		assert.True(tt, p.IsIdentity())
+		assert.False(tt, p.ValidateBasic(), "ValidateBasic must reject identity")
+	})
+	t.Run("Edwards non-identity passes", func(tt *testing.T) {
+		k := big.NewInt(7)
+		x, y := edw.ScalarBaseMult(k.Bytes())
+		p := NewECPointNoCurveCheck(edw, x, y)
+		assert.False(tt, p.IsIdentity())
+		assert.True(tt, p.ValidateBasic())
+	})
+	t.Run("zero coord (0,0) rejected as identity", func(tt *testing.T) {
+		p := NewECPointNoCurveCheck(edw, big.NewInt(0), big.NewInt(0))
+		assert.True(tt, p.IsIdentity())
+		assert.False(tt, p.ValidateBasic())
+	})
+	t.Run("nil coords", func(tt *testing.T) {
+		var p *ECPoint
+		assert.False(tt, p.IsIdentity())
+		assert.False(tt, p.ValidateBasic())
+	})
+}
+
+func TestValidateInSubgroup(t *testing.T) {
+	edw := edwards.Edwards()
+	tss.RegisterCurve("ed25519", edw)
+	s256 := tss.S256()
+	tss.RegisterCurve("secp256k1", s256)
+
+	t.Run("Edwards prime-order point passes", func(tt *testing.T) {
+		x, y := edw.ScalarBaseMult(big.NewInt(7).Bytes())
+		p := NewECPointNoCurveCheck(edw, x, y)
+		assert.True(tt, p.IsInPrimeOrderSubgroup())
+		assert.True(tt, p.ValidateInSubgroup())
+	})
+	t.Run("Edwards identity rejected by ValidateBasic before subgroup check", func(tt *testing.T) {
+		p := NewECPointNoCurveCheck(edw, big.NewInt(0), big.NewInt(1))
+		assert.True(tt, p.IsIdentity())
+		assert.False(tt, p.ValidateInSubgroup(), "identity should fail the ValidateBasic gate")
+		assert.True(tt, p.IsInPrimeOrderSubgroup(), "[N]·identity == identity, so the raw subgroup query still returns true; rejection comes from ValidateBasic")
+	})
+	t.Run("Edwards low-order point rejected", func(tt *testing.T) {
+		// (0, p-1) is the order-2 point on Ed25519.
+		p := edw.Params().P
+		minusOne := new(big.Int).Sub(p, big.NewInt(1))
+		lowOrder := NewECPointNoCurveCheck(edw, big.NewInt(0), minusOne)
+		assert.True(tt, lowOrder.IsOnCurve(), "sanity: (0, p-1) is on Ed25519")
+		assert.False(tt, lowOrder.IsIdentity())
+		assert.False(tt, lowOrder.IsInPrimeOrderSubgroup(), "order-2 point not in prime-order subgroup")
+		assert.False(tt, lowOrder.ValidateInSubgroup())
+	})
+	t.Run("secp256k1 on-curve point passes (cofactor 1)", func(tt *testing.T) {
+		x, y := s256.ScalarBaseMult(big.NewInt(42).Bytes())
+		p := NewECPointNoCurveCheck(s256, x, y)
+		assert.True(tt, p.ValidateInSubgroup())
+	})
+}
+
 func TestS256EcpointJsonSerialization(t *testing.T) {
 	ec := btcec.S256()
 	tss.RegisterCurve("secp256k1", ec)

@@ -14,6 +14,7 @@ import (
 
 	"github.com/AnvoIO/tss-lib/v4/common"
 	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
 type (
@@ -54,7 +55,15 @@ func NewZKProof(Session []byte, x *big.Int, X *crypto.ECPoint, rand io.Reader) (
 
 // NewZKProof verifies a new Schnorr ZK proof of knowledge of the discrete logarithm (GG18Spec Fig. 16)
 func (pf *ZKProof) Verify(Session []byte, X *crypto.ECPoint) bool {
-	if pf == nil || !pf.ValidateBasic() || X == nil {
+	if pf == nil || !pf.ValidateBasic() || X == nil || !X.ValidateInSubgroup() {
+		return false
+	}
+	// X and Alpha arrive from attacker-controlled bytes. Require prime-order
+	// subgroup membership (rejects on-curve Ed25519 low-order points) and a
+	// shared curve, so the transcript hash and scalar mults below can't be
+	// steered onto a foreign or small-subgroup point. Direct API consumers can
+	// otherwise build cross-curve points via NewECPointNoCurveCheck.
+	if !pf.Alpha.ValidateInSubgroup() || !tss.SameCurve(X.Curve(), pf.Alpha.Curve()) {
 		return false
 	}
 	ec := X.Curve()
@@ -122,7 +131,12 @@ func NewZKVProof(Session []byte, V, R *crypto.ECPoint, s, l *big.Int, rand io.Re
 }
 
 func (pf *ZKVProof) Verify(Session []byte, V, R *crypto.ECPoint) bool {
-	if pf == nil || !pf.ValidateBasic() || V == nil || R == nil {
+	if pf == nil || !pf.ValidateBasic() || V == nil || R == nil || !V.ValidateInSubgroup() || !R.ValidateInSubgroup() {
+		return false
+	}
+	// V, R and Alpha are caller-supplied; require prime-order subgroup
+	// membership and a common curve before they enter the transcript and mults.
+	if !pf.Alpha.ValidateInSubgroup() || !tss.SameCurve(V.Curve(), R.Curve()) || !tss.SameCurve(V.Curve(), pf.Alpha.Curve()) {
 		return false
 	}
 	ec := V.Curve()

@@ -123,7 +123,71 @@ func (p *ECPoint) SetCurve(curve elliptic.Curve) *ECPoint {
 }
 
 func (p *ECPoint) ValidateBasic() bool {
-	return p != nil && p.coords[0] != nil && p.coords[1] != nil && p.IsOnCurve()
+	return p != nil && p.coords[0] != nil && p.coords[1] != nil && p.IsOnCurve() && !p.IsIdentity()
+}
+
+// IsIdentity reports whether p is the identity element of its curve. It covers
+// both curve families used here:
+//
+//   - Edwards (Ed25519): the affine identity is (0, 1) and IS on-curve, so it
+//     passes IsOnCurve unaided. Left unchecked, a party could submit (0, 1) as a
+//     Schnorr commitment or VSS share and have a degenerate proof accepted.
+//   - Weierstrass (secp256k1): the identity is the point-at-infinity, encoded as
+//     (0, 0), which is off-curve and already rejected by isOnCurve; the (0, 0)
+//     branch here is defense-in-depth against alternate infinity encodings.
+//
+// Returns false for nil points (no coordinate to inspect).
+func (p *ECPoint) IsIdentity() bool {
+	if p == nil || p.coords[0] == nil || p.coords[1] == nil {
+		return false
+	}
+	if p.coords[0].Sign() != 0 {
+		return false
+	}
+	return p.coords[1].Sign() == 0 || p.coords[1].Cmp(big.NewInt(1)) == 0
+}
+
+// IsInPrimeOrderSubgroup reports whether p lies in the prime-order subgroup of
+// its curve, i.e. [curve.N]·p == identity. For prime-order curves (cofactor 1 —
+// secp256k1 / NIST) every on-curve point satisfies this by Lagrange; for
+// composite-cofactor curves (Ed25519, cofactor 8) it is load-bearing, since
+// on-curve membership alone admits the 8 small-order points an adversary can
+// inject as a Schnorr commitment, VSS share, etc.
+//
+// Adapted from upstream: our ScalarMult panics on the point-at-infinity, so we
+// use ScalarMultChecked. On short-Weierstrass curves [N]·p reduces to the
+// off-curve point-at-infinity, which surfaces here as an error — itself the
+// prime-order witness. On Edwards curves the identity (0, 1) is on-curve, so a
+// subgroup point comes back as a non-error identity.
+//
+// Returns false for nil points or points whose [N]·p is not the identity.
+func (p *ECPoint) IsInPrimeOrderSubgroup() bool {
+	if p == nil || p.coords[0] == nil || p.coords[1] == nil || p.curve == nil {
+		return false
+	}
+	n := p.curve.Params().N
+	np, err := p.ScalarMultChecked(n)
+	if err != nil {
+		return true
+	}
+	return np.IsIdentity()
+}
+
+// ValidateInSubgroup is the stricter sibling of ValidateBasic for untrusted EC
+// points. It runs the basic on-curve / non-identity / non-nil checks and, on
+// composite-cofactor curves, additionally requires prime-order subgroup
+// membership. On prime-order curves the subgroup check is structurally implied
+// by IsOnCurve and is skipped to save a ScalarMult. Callers consuming
+// attacker-controlled points (Schnorr Alpha/X/V/R, VSS vs[j], MtA ProofBobWC
+// pf.U, etc.) should prefer this over ValidateBasic.
+func (p *ECPoint) ValidateInSubgroup() bool {
+	if !p.ValidateBasic() {
+		return false
+	}
+	if !tss.HasCompositeCofactor(p.curve) {
+		return true
+	}
+	return p.IsInPrimeOrderSubgroup()
 }
 
 func (p *ECPoint) EightInvEight() *ECPoint {
