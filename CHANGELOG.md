@@ -3,6 +3,43 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v3.1.1] - 2026-08-11
+
+v3.1.1 security-hardening release, published concurrently with v4.0.1. It is a
+wire- and transcript-compatible continuation of the v3.1 line: existing valid v3
+integrations interoperate unchanged. The breaking Fiat-Shamir, wire, and
+proof-format hardening carried by v4.0.1 is deliberately excluded here.
+
+### Fixed (security)
+
+- Reject the identity element and non-prime-order points in the EC-point proof verifiers.
+- Harden `paillier.Proof.Verify` against a prime-modulus Fermat bypass.
+- Make `GetRandomPositiveInt` return strictly positive values, and add group-membership and canonical-input validation helpers.
+- Make `ECPoint.Add` nil-safe and route degenerate signing scalar multiplications, including the round-5 signature share, through the checked (identity-rejecting) variants.
+- Reject intra-session message replacement in `StoreMessage`.
+- Harden VSS create/verify/reconstruct and reject short keygen decommitments.
+- Enforce group-membership and honest-sampling response-scalar bounds in the DLN and FacProof verifiers.
+- Validate MtA public inputs and bound response scalars and decrypted shares.
+- Deep-copy `LocalSecrets` in `BuildLocalSaveDataSubset` so re-sharing (round 5) and HD signing no longer alter the caller's own saved share through a shared pointer.
+
+### Compatibility
+
+- Wire- and transcript-compatible with the v3 line (v3.0.x, v3.1.0). No protobuf or Fiat-Shamir transcript changes. Applications requiring the breaking proof-format hardening should adopt v4.0.1.
+
+### Divergence from upstream: overlapping-committee resharing
+
+This fork deliberately supports re-sharing where a party belongs to **both** the
+old and the new committee — an in-place refresh that retains existing members
+while rotating the shares. This is a supported, maintained capability, kept
+because there are legitimate operational reasons to retain existing parties across
+a re-share rather than stand up an entirely disjoint new committee. We ported the
+`bnb-chain/tss-lib#128` dual-committee fix (a dual member stores its self-dealt
+VSS share locally instead of on the wire; membership gates on committee-exclusive
+party keys rather than indices; slots resolve in committee-correct index space)
+and guard it with a dedicated regression suite and an automated fail-open check.
+We deliberately do **not** adopt upstream changes that assume disjoint committees,
+because they would break this path.
+
 ## [v3.1.0] - 2026-07-10
 
 v3.1.0 security and maintenance hardening. Existing valid v3 integrations retain their session fallback behavior; explicit fresh session nonces are strongly recommended and become mandatory in v4.
