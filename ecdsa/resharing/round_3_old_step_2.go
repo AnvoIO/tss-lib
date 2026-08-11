@@ -44,7 +44,12 @@ func (round *round3) Start() *tss.Error {
 		// Fix for bnb-chain/tss-lib#128: When sender is also a receiver
 		// (party in both old and new committees), store locally instead
 		// of sending over the wire to avoid routing issues.
-		if round.ReSharingParams().IsNewCommittee() && Pj.KeyInt().Cmp(Pi.KeyInt()) == 0 {
+		// selfShareStoredLocally is a compile-time constant, true in every real
+		// build. The `defang_selfshare_128` test tag flips it to false, reverting
+		// this fix to the pre-#128 emit-on-wire behavior so the Makefile
+		// `test_reshare_failopen` target can prove the dual-committee tests catch a
+		// regressed fix. See selfshare_seam.go.
+		if selfShareStoredLocally && round.ReSharingParams().IsNewCommittee() && Pj.KeyInt().Cmp(Pi.KeyInt()) == 0 {
 			round.temp.dgRound3Message1s[i] = r3msg1
 		} else {
 			round.out <- r3msg1

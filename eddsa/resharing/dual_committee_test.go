@@ -8,6 +8,7 @@
 package resharing_test
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math/big"
 	"sync/atomic"
@@ -16,6 +17,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/AnvoIO/tss-lib/v4/crypto"
+	"github.com/AnvoIO/tss-lib/v4/crypto/vss"
 	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
 	. "github.com/AnvoIO/tss-lib/v4/eddsa/resharing"
 	"github.com/AnvoIO/tss-lib/v4/test"
@@ -35,10 +38,13 @@ import (
 //     (a node does not loop network messages back to itself). This is what turns
 //     the buggy "emit self-share on the wire" into a lost share.
 //   - Index alignment: the dual member occupies index 0 in both committees, so the
-//     old-indexed (round 3) and new-indexed (round 4) array accesses agree.
+//     old-indexed (round 3) and new-indexed (round 4) array accesses agree. The
+//     MISALIGNED case is covered separately by TestResharing_DualCommitteeMember_MisalignedIndex.
 //
 // Against the unfixed round-3 code the dual member's round-4 VSS verification fails
-// on its own corrupted slot and resharing aborts; with the fix it completes.
+// on its own corrupted slot and resharing aborts; with the fix it completes AND the
+// reshared shares reconstruct the ORIGINAL key (see assertReshareCorrect — completion
+// alone is not proof of correctness).
 func TestResharing_DualCommitteeMember_SelfShareContinuity(t *testing.T) {
 	setUp("info")
 	threshold, newThreshold := testThreshold, testThreshold
@@ -95,6 +101,111 @@ func TestResharing_DualCommitteeMember_SelfShareContinuity(t *testing.T) {
 		newInstance(pID, keygen.NewLocalPartySaveData(newPCount))
 	}
 
+	newKeys := driveReshareToDone(t, instances, partyByKey, outCh, endCh, errCh, newPCount)
+
+	// Completion is necessary but NOT sufficient: prove the reshared shares are a
+	// valid sharing of the SAME key, exercising the dual member's self-dealt share
+	// (new-index 0 in this aligned scenario).
+	assertReshareCorrect(t, oldKeys[0].EDDSAPub, newKeys, newThreshold, 0)
+}
+
+// TestResharing_DualCommitteeMember_MisalignedIndex covers the case the aligned
+// test deliberately excludes: a dual member whose OLD-committee index differs from
+// its NEW-committee index. Production overlap does not guarantee alignment. The
+// #128 self-share store writes the round-3 slot by the sender's OLD index while
+// round-4 verification is new-indexed, so a latent conflation of the two index
+// spaces would corrupt the dual member's slot HERE but pass the aligned test. The
+// dual member is old-index 0 but new-index `belowCount` (two fresh members are
+// seeded with keys just below the dual's, pushing it up the sorted new committee).
+func TestResharing_DualCommitteeMember_MisalignedIndex(t *testing.T) {
+	setUp("info")
+	threshold, newThreshold := testThreshold, testThreshold
+
+	oldKeys, oldPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold + 1)
+	require.NoError(t, err, "should load keygen fixtures")
+
+	dualPID := oldPIDs[0] // old-index 0 (smallest old key)
+	dualKey := dualPID.KeyInt()
+
+	const belowCount = 2 // fresh new members with keys < dualKey → dual lands at new-index belowCount
+	newPCount := testParticipants
+
+	// Only the dual member overlaps. Seed `belowCount` fresh members just under the
+	// dual's key and the rest well above every old key (so no other old member is
+	// accidentally pulled into the new committee).
+	newRaw := tss.UnSortedPartyIDs{dualPID}
+	for k := 1; k <= belowCount; k++ {
+		key := new(big.Int).Sub(dualKey, big.NewInt(int64(k)))
+		newRaw = append(newRaw, tss.NewPartyID(fmt.Sprintf("below-%d", k), fmt.Sprintf("BP[%d]", k), key))
+	}
+	aboveBase := new(big.Int).Add(dualKey, big.NewInt(1_000_000))
+	for k := 1; k <= newPCount-1-belowCount; k++ {
+		key := new(big.Int).Add(aboveBase, big.NewInt(int64(k)))
+		newRaw = append(newRaw, tss.NewPartyID(fmt.Sprintf("above-%d", k), fmt.Sprintf("AP[%d]", k), key))
+	}
+	newPIDs := tss.SortPartyIDs(newRaw)
+
+	dualNewIdx := -1
+	for i, p := range newPIDs {
+		if p.KeyInt().Cmp(dualKey) == 0 {
+			dualNewIdx = i
+		}
+	}
+	require.Equal(t, belowCount, dualNewIdx, "dual member must sit at new-index == belowCount")
+	require.NotEqual(t, 0, dualNewIdx, "scenario is only meaningful when old-index (0) != new-index")
+
+	oldP2PCtx := tss.NewPeerContext(oldPIDs)
+	newP2PCtx := tss.NewPeerContext(newPIDs)
+
+	errCh := make(chan *tss.Error, len(oldPIDs)+newPCount)
+	outCh := make(chan tss.Message, (len(oldPIDs)+newPCount)*8)
+	endCh := make(chan *keygen.LocalPartySaveData, len(oldPIDs)+newPCount)
+
+	partyByKey := make(map[string]*LocalParty)
+	var instances []*LocalParty
+	newInstance := func(pID *tss.PartyID, save keygen.LocalPartySaveData) *LocalParty {
+		params, pErr := tss.NewReSharingParameters(tss.Edwards(), oldP2PCtx, newP2PCtx, pID, len(oldPIDs), threshold, newPCount, newThreshold)
+		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
+		P := NewLocalParty(params, save, outCh, endCh).(*LocalParty)
+		partyByKey[pID.KeyInt().String()] = P
+		instances = append(instances, P)
+		return P
+	}
+	for j, pID := range oldPIDs {
+		newInstance(pID, oldKeys[j]) // dual member (old idx 0) carries its old key data
+	}
+	for _, pID := range newPIDs {
+		if _, exists := partyByKey[pID.KeyInt().String()]; exists {
+			continue // the dual member, already created
+		}
+		newInstance(pID, keygen.NewLocalPartySaveData(newPCount))
+	}
+
+	newKeys := driveReshareToDone(t, instances, partyByKey, outCh, endCh, errCh, newPCount)
+
+	// Reconstruct through the dual member's self-dealt share at its NEW index.
+	assertReshareCorrect(t, oldKeys[0].EDDSAPub, newKeys, newThreshold, dualNewIdx)
+}
+
+// driveReshareToDone starts every instance, routes messages between the single
+// instance of each party while DROPPING self-addressed messages (a real transport
+// does not loop a node's own messages back — the crux of the #128 scenario), and
+// returns the new-committee save data indexed by new-committee index.
+//
+// It is loud: any party error fails immediately with the underlying cause, and a
+// stall fails with the finished/expected count and the #128 hypothesis rather than
+// hanging silently.
+func driveReshareToDone(
+	t *testing.T,
+	instances []*LocalParty,
+	partyByKey map[string]*LocalParty,
+	outCh chan tss.Message,
+	endCh chan *keygen.LocalPartySaveData,
+	errCh chan *tss.Error,
+	newPCount int,
+) []keygen.LocalPartySaveData {
+	t.Helper()
 	for _, P := range instances {
 		go func(P *LocalParty) {
 			if startErr := P.Start(); startErr != nil {
@@ -102,39 +213,180 @@ func TestResharing_DualCommitteeMember_SelfShareContinuity(t *testing.T) {
 			}
 		}(P)
 	}
-
-	// Router: deliver each message to the single instance of every intended recipient,
-	// EXCEPT the sender itself (a real transport does not echo self-addressed messages).
 	route := func(msg tss.Message) {
 		from := msg.GetFrom()
 		for _, dest := range msg.GetTo() {
 			if dest.KeyInt().Cmp(from.KeyInt()) == 0 {
-				continue // drop self-addressed message
+				continue // drop self-addressed message (real transport does not echo)
 			}
 			if inst, ok := partyByKey[dest.KeyInt().String()]; ok {
 				go test.SharedPartyUpdater(inst, msg, errCh)
 			}
 		}
 	}
-
+	newKeys := make([]keygen.LocalPartySaveData, newPCount)
 	var ended int32
-	timeout := time.After(60 * time.Second)
+	// Idle-progress watchdog: a healthy run has continuous message flow, so a
+	// prolonged silence means a party is stuck waiting for a message that will
+	// never arrive — the #128 failure mode (a dual member lost its self-dealt
+	// share). Resetting on every message/completion surfaces a stall in seconds
+	// instead of a fixed minutes-long deadline, while a healthy run (well under a
+	// second, no gap near this long) never trips it.
+	const idleTimeout = 30 * time.Second
+	idle := time.NewTimer(idleTimeout)
+	defer idle.Stop()
+	bumpIdle := func() {
+		if !idle.Stop() {
+			select {
+			case <-idle.C:
+			default:
+			}
+		}
+		idle.Reset(idleTimeout)
+	}
 	for {
 		select {
 		case rErr := <-errCh:
 			t.Fatalf("resharing with a dual-committee member must not error: %s", rErr)
 		case msg := <-outCh:
+			bumpIdle()
 			if msg.GetTo() == nil {
 				t.Fatal("unexpected nil destination during resharing")
 			}
 			route(msg)
-		case <-endCh:
+		case save := <-endCh:
+			bumpIdle()
+			if save.Xi != nil { // a new-committee share; old-only members deliver Xi==nil
+				idx, oErr := save.OriginalIndex()
+				require.NoError(t, oErr, "new save data must resolve its committee index")
+				newKeys[idx] = *save
+			}
 			if atomic.AddInt32(&ended, 1) == int32(len(instances)) {
 				t.Logf("resharing completed for all %d parties (incl. the dual-committee member)", len(instances))
-				return
+				return newKeys
 			}
-		case <-timeout:
-			t.Fatalf("timed out: only %d/%d parties finished — the dual member likely self-aborted at round 4 (unfixed #128)", atomic.LoadInt32(&ended), len(instances))
+		case <-idle.C:
+			t.Fatalf("resharing STALLED (no progress for %s): only %d/%d parties finished — a dual member likely lost its self-dealt share (regressed #128 fix)", idleTimeout, atomic.LoadInt32(&ended), len(instances))
 		}
 	}
+}
+
+// assertReshareCorrect fails the test unless the reshared keys pass the
+// correctness oracle (checkReshareCorrect).
+func assertReshareCorrect(t *testing.T, oldPub *crypto.ECPoint, newKeys []keygen.LocalPartySaveData, newThreshold, mustIncludeNewIdx int) {
+	t.Helper()
+	require.NoError(t, checkReshareCorrect(oldPub, newKeys, newThreshold, mustIncludeNewIdx))
+}
+
+// checkReshareCorrect is the correctness oracle. Reaching endCh proves only that
+// the protocol did not abort; it does NOT prove the reshared shares are right — a
+// silently corrupted self-dealt share would still "finish". This returns an error
+// (nil on success) for the first violation of the real resharing invariant: the
+// new-committee keys are a valid (newThreshold)-of-n sharing of the SAME group
+// public key as before. Specifically:
+//   - every new party carries a share and the UNCHANGED group public key;
+//   - each published BigXj equals Xi·G (per-share commitment self-consistency);
+//   - any newThreshold+1 shares INCLUDING the dual member (mustIncludeNewIdx)
+//     Lagrange-reconstruct the original private key behind oldPub.
+//
+// It returns an error rather than failing a *testing.T so the negative control
+// TestDualCommitteeOracle_DetectsCorruptedShare can assert the oracle actually
+// REJECTS a corrupted share — proving these checks have teeth.
+func checkReshareCorrect(oldPub *crypto.ECPoint, newKeys []keygen.LocalPartySaveData, newThreshold, mustIncludeNewIdx int) error {
+	ec := tss.Edwards()
+	for j := range newKeys {
+		key := newKeys[j]
+		if key.Xi == nil {
+			return fmt.Errorf("new party %d produced no share", j)
+		}
+		if !key.EDDSAPub.Equals(oldPub) {
+			return fmt.Errorf("new party %d: group public key changed under resharing", j)
+		}
+		if !key.BigXj[j].Equals(crypto.ScalarBaseMult(ec, key.Xi)) {
+			return fmt.Errorf("new party %d: BigXj != Xi·G (share/commitment mismatch)", j)
+		}
+	}
+	idxs := reconstructSubset(len(newKeys), newThreshold+1, mustIncludeNewIdx)
+	shares := make(vss.Shares, 0, len(idxs))
+	for _, j := range idxs {
+		shares = append(shares, &vss.Share{Threshold: newThreshold, ID: newKeys[j].ShareID, Share: newKeys[j].Xi})
+	}
+	secret, err := shares.ReConstruct(ec)
+	if err != nil {
+		return fmt.Errorf("reconstruction from newThreshold+1 new shares failed: %w", err)
+	}
+	if !crypto.ScalarBaseMult(ec, secret).Equals(oldPub) {
+		return fmt.Errorf("newThreshold+1 new shares (incl. dual member at new-index %d) do not reconstruct the original key", mustIncludeNewIdx)
+	}
+	return nil
+}
+
+// TestDualCommitteeOracle_DetectsCorruptedShare is the fail-open negative control
+// for the oracle itself: it feeds checkReshareCorrect an honest sharing and then a
+// deliberately corrupted dual-member share, asserting the honest set passes and
+// that BOTH the per-share commitment gate and the reconstruction gate reject the
+// corruption. Without it, a future edit could silently weaken the oracle into a
+// no-op that the dual-committee tests would never notice.
+func TestDualCommitteeOracle_DetectsCorruptedShare(t *testing.T) {
+	ec := tss.Edwards()
+	const n, threshold, dualIdx = testParticipants, testThreshold, 2
+
+	secret, err := rand.Int(rand.Reader, ec.Params().N)
+	require.NoError(t, err)
+	pub := crypto.ScalarBaseMult(ec, secret)
+
+	ids := make([]*big.Int, n)
+	for i := range ids {
+		ids[i] = big.NewInt(int64(i + 1))
+	}
+	_, shares, err := vss.Create(ec, threshold, secret, ids, rand.Reader)
+	require.NoError(t, err)
+
+	build := func() []keygen.LocalPartySaveData {
+		nk := make([]keygen.LocalPartySaveData, n)
+		for j := 0; j < n; j++ {
+			sd := keygen.NewLocalPartySaveData(n)
+			sd.Xi = shares[j].Share
+			sd.ShareID = shares[j].ID
+			sd.EDDSAPub = pub
+			sd.Ks = ids
+			for k := 0; k < n; k++ {
+				sd.BigXj[k] = crypto.ScalarBaseMult(ec, shares[k].Share)
+			}
+			nk[j] = sd
+		}
+		return nk
+	}
+
+	// The honest sharing passes.
+	require.NoError(t, checkReshareCorrect(pub, build(), threshold, dualIdx),
+		"honest sharing must pass the oracle")
+
+	// Xi-only corruption of the dual member: caught by the per-share commitment gate.
+	c1 := build()
+	c1[dualIdx].Xi = new(big.Int).Add(c1[dualIdx].Xi, big.NewInt(1))
+	require.Error(t, checkReshareCorrect(pub, c1, threshold, dualIdx),
+		"oracle must reject a dual share inconsistent with its commitment")
+
+	// Consistent corruption (Xi and its BigXj moved together) stays on-commitment
+	// but off-polynomial: only the reconstruction gate can catch it.
+	c2 := build()
+	badXi := new(big.Int).Add(c2[dualIdx].Xi, big.NewInt(1))
+	c2[dualIdx].Xi = badXi
+	c2[dualIdx].BigXj[dualIdx] = crypto.ScalarBaseMult(ec, badXi)
+	require.Error(t, checkReshareCorrect(pub, c2, threshold, dualIdx),
+		"reconstruction gate must reject an on-commitment but off-polynomial dual share")
+}
+
+// reconstructSubset returns k distinct new-committee indices in [0,n) that always
+// include mustInclude, so the dual member's self-dealt share is on the
+// reconstruction path.
+func reconstructSubset(n, k, mustInclude int) []int {
+	idxs := []int{mustInclude}
+	for j := 0; j < n && len(idxs) < k; j++ {
+		if j != mustInclude {
+			idxs = append(idxs, j)
+		}
+	}
+	return idxs
 }
