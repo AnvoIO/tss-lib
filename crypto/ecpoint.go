@@ -62,6 +62,16 @@ func (p *ECPoint) Y() *big.Int {
 }
 
 func (p *ECPoint) Add(p1 *ECPoint) (*ECPoint, error) {
+	// SECURITY (SRC-2026-641): guard against a nil receiver/operand or a nil
+	// coordinate before dereferencing via X()/Y(). A degenerate point reaching
+	// Add then surfaces as an error the caller can attribute to the responsible
+	// peer rather than crashing the process. Every Add call site already checks
+	// the returned error.
+	if p == nil || p1 == nil ||
+		p.coords[0] == nil || p.coords[1] == nil ||
+		p1.coords[0] == nil || p1.coords[1] == nil {
+		return nil, errors.New("ECPoint.Add: nil operand")
+	}
 	x, y := p.curve.Add(p.X(), p.Y(), p1.X(), p1.Y())
 	return NewECPoint(p.curve, x, y)
 }

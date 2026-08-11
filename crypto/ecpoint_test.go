@@ -289,6 +289,55 @@ func TestScalarMultCheckedRejectsPointAtInfinity(t *testing.T) {
 	assert.True(t, got.Equals(want), "2*G via ScalarMultChecked should equal ScalarBaseMult(2)")
 }
 
+// TestECPointAddNilSafety is a regression test for SRC-2026-641: (*ECPoint).Add
+// must return an error, not panic, when either operand (or an operand's
+// coordinate) is nil. Upstream (bnb-chain/tss-lib PR #332) hardened Add because
+// their ScalarMult returns nil on the point at infinity; this fork's ScalarMult
+// instead panics, so a nil point normally cannot originate from it. The guard is
+// therefore defense-in-depth for externally-constructed or unchecked points that
+// reach Add, closing the same process-crash surface.
+func TestECPointAddNilSafety(t *testing.T) {
+	ec := tss.S256()
+	G := ScalarBaseMult(ec, big.NewInt(1))  // valid base point G
+	G2 := ScalarBaseMult(ec, big.NewInt(2)) // valid 2*G
+	nilXPoint := NewECPointNoCurveCheck(ec, nil, big.NewInt(4))
+	nilYPoint := NewECPointNoCurveCheck(ec, big.NewInt(3), nil)
+
+	tests := []struct {
+		name    string
+		p       *ECPoint
+		p1      *ECPoint
+		wantErr bool
+	}{
+		{name: "nil receiver", p: nil, p1: G, wantErr: true},
+		{name: "nil argument", p: G, p1: nil, wantErr: true},
+		{name: "both nil", p: nil, p1: nil, wantErr: true},
+		{name: "nil X coord in receiver", p: nilXPoint, p1: G, wantErr: true},
+		{name: "nil Y coord in receiver", p: nilYPoint, p1: G, wantErr: true},
+		{name: "nil X coord in argument", p: G, p1: nilXPoint, wantErr: true},
+		{name: "nil Y coord in argument", p: G, p1: nilYPoint, wantErr: true},
+		{name: "two valid points (happy)", p: G, p1: G2, wantErr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var (
+				got *ECPoint
+				err error
+			)
+			assert.NotPanics(t, func() {
+				got, err = tt.p.Add(tt.p1)
+			}, "Add must never panic on nil operands")
+			if tt.wantErr {
+				assert.Error(t, err)
+				assert.Nil(t, got)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, got)
+			}
+		})
+	}
+}
+
 func TestEdwardsEcpointJsonSerialization(t *testing.T) {
 	ec := edwards.Edwards()
 	tss.RegisterCurve("ed25519", ec)

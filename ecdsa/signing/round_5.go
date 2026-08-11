@@ -59,7 +59,15 @@ func (round *round5) Start() *tss.Error {
 		}
 	}
 
-	R = R.ScalarMult(round.temp.thetaInverse)
+	// SECURITY (SRC-2026-641): thetaInverse is a deterministic modular inverse
+	// that can be degenerate; on the resulting identity point our fork's
+	// ScalarMult panics rather than returning nil. Route through the checked
+	// variant and attribute the failure instead of crashing before the R.X()
+	// dereference below.
+	R, err := R.ScalarMultChecked(round.temp.thetaInverse)
+	if err != nil {
+		return round.WrapError(errors2.Wrapf(err, "R.ScalarMult(thetaInverse)"))
+	}
 	N := round.Params().EC().Params().N
 	modN := common.ModInt(N)
 	rx := R.X()
