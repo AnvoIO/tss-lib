@@ -30,6 +30,15 @@ const MaxProofElementBytes = 512
 // rejects undersized moduli before running any modular operation.
 const verifyMinModulusBitLen = 2048
 
+// fsDomainTag is the per-proof-type Fiat-Shamir domain separator prepended to
+// the caller-supplied Session (see crypto/facproof.fsSession for the rationale).
+// Frozen once shipped — changing it invalidates every dlnproof transcript.
+const fsDomainTag = "AnvoIO.tss-lib.v4.dlnproof"
+
+func fsSession(Session []byte) []byte {
+	return append([]byte(fsDomainTag+"|"), Session...)
+}
+
 type (
 	Proof struct {
 		Alpha,
@@ -49,7 +58,7 @@ func NewDLNProof(Session []byte, h1, h2, x, p, q, N *big.Int, rand io.Reader) *P
 		alpha[i] = modN.Exp(h1, a[i])
 	}
 	msg := append([]*big.Int{h1, h2, N}, alpha[:]...)
-	c := common.SHA512_256i_TAGGED(Session, msg...)
+	c := common.SHA512_256i_TAGGED(fsSession(Session), msg...)
 	t := [Iterations]*big.Int{}
 	cIBI := new(big.Int)
 	for i := range t {
@@ -100,7 +109,7 @@ func (p *Proof) Verify(Session []byte, h1, h2, N *big.Int) bool {
 		}
 	}
 	msg := append([]*big.Int{h1, h2, N}, p.Alpha[:]...)
-	c := common.SHA512_256i_TAGGED(Session, msg...)
+	c := common.SHA512_256i_TAGGED(fsSession(Session), msg...)
 	cIBI := new(big.Int)
 	for i := 0; i < Iterations; i++ {
 		cI := c.Bit(i)

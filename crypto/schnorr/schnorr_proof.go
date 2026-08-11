@@ -29,6 +29,23 @@ type (
 	}
 )
 
+// Per-proof-type Fiat-Shamir domain separators (see crypto/facproof.fsSession
+// for the rationale and the v3↔v4 wire-incompat note). Frozen once shipped —
+// changing a tag or the "|" separator invalidates all Schnorr proofs of that
+// type.
+const (
+	fsDomainTagZK  = "AnvoIO.tss-lib.v4.schnorr.zk"
+	fsDomainTagZKV = "AnvoIO.tss-lib.v4.schnorr.zkv"
+)
+
+func fsSessionZK(Session []byte) []byte {
+	return append([]byte(fsDomainTagZK+"|"), Session...)
+}
+
+func fsSessionZKV(Session []byte) []byte {
+	return append([]byte(fsDomainTagZKV+"|"), Session...)
+}
+
 // NewZKProof constructs a new Schnorr ZK proof of knowledge of the discrete logarithm (GG18Spec Fig. 16)
 func NewZKProof(Session []byte, x *big.Int, X *crypto.ECPoint, rand io.Reader) (*ZKProof, error) {
 	if x == nil || X == nil || !X.ValidateBasic() {
@@ -44,7 +61,7 @@ func NewZKProof(Session []byte, x *big.Int, X *crypto.ECPoint, rand io.Reader) (
 
 	var c *big.Int
 	{
-		cHash := common.SHA512_256i_TAGGED(Session, X.X(), X.Y(), g.X(), g.Y(), alpha.X(), alpha.Y())
+		cHash := common.SHA512_256i_TAGGED(fsSessionZK(Session), X.X(), X.Y(), g.X(), g.Y(), alpha.X(), alpha.Y())
 		c = common.RejectionSample(q, cHash)
 	}
 	t := common.ModInt(q).Mul(c, x)
@@ -77,7 +94,7 @@ func (pf *ZKProof) Verify(Session []byte, X *crypto.ECPoint) bool {
 
 	var c *big.Int
 	{
-		cHash := common.SHA512_256i_TAGGED(Session, X.X(), X.Y(), g.X(), g.Y(), pf.Alpha.X(), pf.Alpha.Y())
+		cHash := common.SHA512_256i_TAGGED(fsSessionZK(Session), X.X(), X.Y(), g.X(), g.Y(), pf.Alpha.X(), pf.Alpha.Y())
 		c = common.RejectionSample(q, cHash)
 	}
 	// pf.T is peer-supplied and only range-checked to [0, q), so T == 0 is
@@ -120,7 +137,7 @@ func NewZKVProof(Session []byte, V, R *crypto.ECPoint, s, l *big.Int, rand io.Re
 
 	var c *big.Int
 	{
-		cHash := common.SHA512_256i_TAGGED(Session, V.X(), V.Y(), R.X(), R.Y(), g.X(), g.Y(), alpha.X(), alpha.Y())
+		cHash := common.SHA512_256i_TAGGED(fsSessionZKV(Session), V.X(), V.Y(), R.X(), R.Y(), g.X(), g.Y(), alpha.X(), alpha.Y())
 		c = common.RejectionSample(q, cHash)
 	}
 	modQ := common.ModInt(q)
@@ -150,7 +167,7 @@ func (pf *ZKVProof) Verify(Session []byte, V, R *crypto.ECPoint) bool {
 
 	var c *big.Int
 	{
-		cHash := common.SHA512_256i_TAGGED(Session, V.X(), V.Y(), R.X(), R.Y(), g.X(), g.Y(), pf.Alpha.X(), pf.Alpha.Y())
+		cHash := common.SHA512_256i_TAGGED(fsSessionZKV(Session), V.X(), V.Y(), R.X(), R.Y(), g.X(), g.Y(), pf.Alpha.X(), pf.Alpha.Y())
 		c = common.RejectionSample(q, cHash)
 	}
 	// pf.T, pf.U are peer-supplied and only range-checked to [0, q), so a value of

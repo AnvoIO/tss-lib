@@ -23,7 +23,25 @@ const (
 	// unknown-order moduli N0 and NCap in Verify; it matches the keygen
 	// Paillier/NTilde size so undersized moduli are rejected up front.
 	verifyMinModulusBitLen = 2048
+	// fsDomainTag is the Fiat-Shamir domain separator prepended to the
+	// caller-supplied Session for every challenge derivation in this package.
+	// Cross-proof transcript collisions are already statistically implausible
+	// because each proof type hashes a different arity of big.Int inputs
+	// (length-encoded by SHA512_256i_TAGGED), but explicit per-type tagging
+	// makes the domain separation visible and audit-friendly.
+	//
+	// The AnvoIO.tss-lib.v4.* namespace is frozen once shipped: the exact bytes
+	// are mixed into every proof transcript, so changing a tag (or the "|"
+	// separator) invalidates all proofs of that type. A future wire break bumps
+	// the v4 segment.
+	fsDomainTag = "AnvoIO.tss-lib.v4.facproof"
 )
+
+// fsSession returns the per-proof-type tagged Session bytes. Wire-incompatible
+// with v3 by design (the /v4 module bump consumes this break).
+func fsSession(Session []byte) []byte {
+	return append([]byte(fsDomainTag+"|"), Session...)
+}
 
 type (
 	ProofFac struct {
@@ -83,7 +101,7 @@ func NewProof(Session []byte, ec elliptic.Curve, N0, NCap, s, t, N0p, N0q *big.I
 	// Fig 28.2 e
 	var e *big.Int
 	{
-		eHash := common.SHA512_256i_TAGGED(Session, N0, NCap, s, t, P, Q, A, B, T, sigma)
+		eHash := common.SHA512_256i_TAGGED(fsSession(Session), N0, NCap, s, t, P, Q, A, B, T, sigma)
 		e = common.RejectionSample(q, eHash)
 	}
 
@@ -198,7 +216,7 @@ func (pf *ProofFac) Verify(Session []byte, ec elliptic.Curve, N0, NCap, s, t *bi
 
 	var e *big.Int
 	{
-		eHash := common.SHA512_256i_TAGGED(Session, N0, NCap, s, t, pf.P, pf.Q, pf.A, pf.B, pf.T, pf.Sigma)
+		eHash := common.SHA512_256i_TAGGED(fsSession(Session), N0, NCap, s, t, pf.P, pf.Q, pf.A, pf.B, pf.T, pf.Sigma)
 		e = common.RejectionSample(q, eHash)
 	}
 

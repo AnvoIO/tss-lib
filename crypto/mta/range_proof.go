@@ -25,12 +25,31 @@ const (
 	// Paillier N and NTilde moduli (paillierBitsLen = 2048). Also used by
 	// ProofBobWC.Verify in proofs.go.
 	verifyMinModulusBitLen = 2048
+	// fsDomainTag* are the per-proof-type Fiat-Shamir domain separators for the
+	// MtA package (see crypto/facproof.fsSession for rationale). The bob vs
+	// bob-wc split mirrors the X==nil dispatch in ProveBobWC/Verify, keeping the
+	// two Bob variants disjoint at the FS-tag level. Frozen once shipped.
+	fsDomainTagRangeAlice = "AnvoIO.tss-lib.v4.mta.range-alice"
+	fsDomainTagBob        = "AnvoIO.tss-lib.v4.mta.bob"
+	fsDomainTagBobWC      = "AnvoIO.tss-lib.v4.mta.bob-wc"
 )
 
 var (
 	zero = big.NewInt(0)
 	one  = big.NewInt(1)
 )
+
+func fsSessionRangeAlice(Session []byte) []byte {
+	return append([]byte(fsDomainTagRangeAlice+"|"), Session...)
+}
+
+func fsSessionBob(Session []byte) []byte {
+	return append([]byte(fsDomainTagBob+"|"), Session...)
+}
+
+func fsSessionBobWC(Session []byte) []byte {
+	return append([]byte(fsDomainTagBobWC+"|"), Session...)
+}
 
 type (
 	RangeProofAlice struct {
@@ -78,7 +97,7 @@ func ProveRangeAlice(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, 
 	// 8-9. e'
 	var e *big.Int
 	{ // must use RejectionSample
-		eHash := common.SHA512_256i_TAGGED(Session, append(pk.AsInts(), NTilde, h1, h2, c, z, u, w)...)
+		eHash := common.SHA512_256i_TAGGED(fsSessionRangeAlice(Session), append(pk.AsInts(), NTilde, h1, h2, c, z, u, w)...)
 		e = common.RejectionSample(q, eHash)
 	}
 
@@ -201,7 +220,7 @@ func (pf *RangeProofAlice) Verify(Session []byte, ec elliptic.Curve, pk *paillie
 	// 1-2. e'
 	var e *big.Int
 	{ // must use RejectionSample
-		eHash := common.SHA512_256i_TAGGED(Session, append(pk.AsInts(), NTilde, h1, h2, c, pf.Z, pf.U, pf.W)...)
+		eHash := common.SHA512_256i_TAGGED(fsSessionRangeAlice(Session), append(pk.AsInts(), NTilde, h1, h2, c, pf.Z, pf.U, pf.W)...)
 		e = common.RejectionSample(q, eHash)
 	}
 
