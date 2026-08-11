@@ -38,6 +38,7 @@ Non-breaking proof- and boundary-validation hardening (shared with v3.1.1):
 - Harden VSS create/verify/reconstruct and reject short keygen decommitments.
 - Enforce group-membership and honest-sampling response-scalar bounds in the DLN and FacProof verifiers.
 - Validate MtA public inputs and bound response scalars and decrypted shares.
+- Deep-copy `LocalSecrets` in `BuildLocalSaveDataSubset` so re-sharing (round 5) and HD signing no longer alter the caller's own saved share through a shared pointer.
 
 ### Changed (breaking)
 
@@ -63,6 +64,26 @@ verify.
 - Wire- and transcript-incompatible with v4.0.0 and with the v3 line. Use only v4.0.1 participants in a session, and migrate every party together.
 - The `AnvoIO.tss-lib.v4.*` Fiat-Shamir domain-separation namespace is frozen. A future transcript break bumps the version segment.
 
+### Divergence from upstream: overlapping-committee resharing
+
+This fork deliberately supports re-sharing where a party belongs to **both** the
+old and the new committee — an in-place refresh that retains existing members
+while rotating the shares (and optionally adds or removes others). This is a
+supported, maintained capability, kept because there are legitimate operational
+reasons to retain existing parties across a re-share rather than stand up an
+entirely disjoint new committee.
+
+Upstream (`bnb-chain/tss-lib`) assumes the two committees are disjoint. We ported
+the `bnb-chain/tss-lib#128` dual-committee fix — a dual member stores its
+self-dealt VSS share locally instead of on the wire, membership gating keys off
+committee-exclusive party keys rather than indices, and slots resolve in
+committee-correct index space — and guard it with a dedicated dual-committee
+regression suite plus an automated fail-open check (`make test_reshare_failopen`).
+We deliberately do **not** adopt upstream changes that assume disjoint committees
+— for example a construction-time rule rejecting overlap, or removing the round-3
+self-share write — because they would break this path. Integrations that rely on
+overlapping-committee re-sharing should track this fork rather than upstream.
+
 ## [v3.1.1] - 2026-08-11
 
 v3.1.1 security-hardening release, published concurrently with v4.0.1. It is a
@@ -82,10 +103,19 @@ Non-breaking proof- and boundary-validation hardening (shared with v4.0.1):
 - Harden VSS create/verify/reconstruct and reject short keygen decommitments.
 - Enforce group-membership and honest-sampling response-scalar bounds in the DLN and FacProof verifiers.
 - Validate MtA public inputs and bound response scalars and decrypted shares.
+- Deep-copy `LocalSecrets` in `BuildLocalSaveDataSubset` so re-sharing (round 5) and HD signing no longer alter the caller's own saved share through a shared pointer.
 
 ### Compatibility
 
 - Wire- and transcript-compatible with the v3 line (v3.0.x, v3.1.0). No protobuf or Fiat-Shamir transcript changes. Applications requiring the breaking proof-format hardening should adopt v4.0.1.
+
+### Divergence from upstream: overlapping-committee resharing
+
+As on the v4 line, this release supports re-sharing where a party is in both the
+old and new committees (in-place refresh retaining existing members), via the
+ported `bnb-chain/tss-lib#128` dual-committee fix — a deliberate, maintained
+divergence from upstream's disjoint-committee assumption. See the v4.0.1 entry
+for the mechanism.
 
 ## [v4.0.0] - 2026-07-10
 
