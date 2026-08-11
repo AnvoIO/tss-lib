@@ -92,6 +92,7 @@ func NewDGRound2Message1(
 	modProof *modproof.ProofMod,
 	NTildei, H1i, H2i *big.Int,
 	dlnProof1, dlnProof2 *dlnproof.Proof,
+	nTildeModProof *modproof.ProofMod,
 ) (tss.ParsedMessage, error) {
 	meta := tss.MessageRouting{
 		From:             from,
@@ -116,6 +117,10 @@ func NewDGRound2Message1(
 		H2:         H2i.Bytes(),
 		Dlnproof_1: dlnProof1Bz,
 		Dlnproof_2: dlnProof2Bz,
+	}
+	if nTildeModProof != nil {
+		nTildePfBzs := nTildeModProof.Bytes()
+		content.NTildeModProof = nTildePfBzs[:]
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg), nil
@@ -154,6 +159,15 @@ func (m *DGRound2Message1) UnmarshalH2() *big.Int {
 
 func (m *DGRound2Message1) UnmarshalModProof() (*modproof.ProofMod, error) {
 	return modproof.NewProofFromBytes(m.GetModProof())
+}
+
+// UnmarshalNTildeModProof returns the ModProof attesting that the peer's
+// resharing NTilde is a Blum integer, mirroring keygen's
+// KGRound2Message2.UnmarshalNTildeModProof. May return an error for peers that
+// pre-date this v4 field; the verifier in round_4_new_step_2.go falls back to
+// NoProofMod() behavior in that case.
+func (m *DGRound2Message1) UnmarshalNTildeModProof() (*modproof.ProofMod, error) {
+	return modproof.NewProofFromBytes(m.GetNTildeModProof())
 }
 
 func (m *DGRound2Message1) UnmarshalDLNProof1() (*dlnproof.Proof, error) {

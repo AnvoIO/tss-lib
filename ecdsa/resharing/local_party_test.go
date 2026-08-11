@@ -84,10 +84,6 @@ func TestE2EConcurrent(t *testing.T) {
 		params, err := tss.NewReSharingParameters(tss.S256(), oldP2PCtx, newP2PCtx, pID, testParticipants, threshold, newPCount, newThreshold)
 		assert.NoError(t, err)
 		params.SetSessionNonce(big.NewInt(1))
-		// do not use in untrusted setting
-		params.SetNoProofMod()
-		// do not use in untrusted setting
-		params.SetNoProofFac()
 		save := keygen.NewLocalPartySaveData(newPCount)
 		if j < len(fixtures) && len(newPIDs) <= len(fixtures) {
 			save.LocalPreParams = fixtures[j].LocalPreParams

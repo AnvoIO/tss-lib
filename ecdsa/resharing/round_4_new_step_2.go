@@ -92,6 +92,7 @@ func (round *round4) Start() *tss.Error {
 		wg.Add(3)
 		go func(j int, msg tss.ParsedMessage, r2msg1 *DGRound2Message1) {
 			defer wg.Done()
+			ContextJ := common.AppendBigIntToBytesSlice(round.temp.ssid, big.NewInt(int64(j)))
 			modProof, err := r2msg1.UnmarshalModProof()
 			if err != nil {
 				if !round.Parameters.NoProofMod() {
@@ -100,10 +101,33 @@ func (round *round4) Start() *tss.Error {
 				common.Logger.Warningf("modProof verify failed for party %s", msg.GetFrom(), err)
 				return
 			}
-			ContextJ := common.AppendBigIntToBytesSlice(round.temp.ssid, big.NewInt(int64(j)))
 			if ok := modProof.Verify(ContextJ, paiPK.N); !ok {
 				paiProofCulprits[j] = msg.GetFrom()
 				common.Logger.Warningf("modProof verify failed for party %s", msg.GetFrom(), err)
+				return
+			}
+			// Verify the ModProof for the peer's NTilde. Mirrors the keygen-side
+			// check in keygen/round_3.go. Closes the smooth-subgroup NTilde
+			// injection path for resharing — the peer's saved NTilde/H1/H2 (set
+			// below) is now bound to a Blum-integer-product attestation.
+			//
+			// Backward compatibility: peers built against the pre-v4
+			// DGRound2Message1 (no nTildeModProof field) ship empty bytes; treat
+			// as NoProofMod()-style warn-only. NTildej is re-derived from the
+			// goroutine's own r2msg1 (not the loop-scoped copy) to avoid the
+			// closure capturing a value that mutates across iterations.
+			nTildeModProof, err := r2msg1.UnmarshalNTildeModProof()
+			if err != nil {
+				if !round.Parameters.NoProofMod() {
+					paiProofCulprits[j] = msg.GetFrom()
+				}
+				common.Logger.Warningf("nTildeModProof not present for party %s: %v", msg.GetFrom(), err)
+				return
+			}
+			NTildej := new(big.Int).SetBytes(r2msg1.GetNTilde())
+			if ok := nTildeModProof.Verify(ContextJ, NTildej); !ok {
+				paiProofCulprits[j] = msg.GetFrom()
+				common.Logger.Warningf("nTildeModProof verify failed for party %s", msg.GetFrom())
 			}
 		}(j, msg, r2msg1)
 		_j := j

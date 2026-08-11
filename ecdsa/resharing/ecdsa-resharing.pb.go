@@ -98,16 +98,23 @@ func (x *DGRound1Message) GetSsid() []byte {
 
 // The Round 2 data is broadcast to other peers of the New Committee in this message.
 type DGRound2Message1 struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PaillierN     []byte                 `protobuf:"bytes,1,opt,name=paillier_n,json=paillierN,proto3" json:"paillier_n,omitempty"`
-	ModProof      [][]byte               `protobuf:"bytes,2,rep,name=modProof,proto3" json:"modProof,omitempty"`
-	NTilde        []byte                 `protobuf:"bytes,3,opt,name=n_tilde,json=nTilde,proto3" json:"n_tilde,omitempty"`
-	H1            []byte                 `protobuf:"bytes,4,opt,name=h1,proto3" json:"h1,omitempty"`
-	H2            []byte                 `protobuf:"bytes,5,opt,name=h2,proto3" json:"h2,omitempty"`
-	Dlnproof_1    [][]byte               `protobuf:"bytes,6,rep,name=dlnproof_1,json=dlnproof1,proto3" json:"dlnproof_1,omitempty"`
-	Dlnproof_2    [][]byte               `protobuf:"bytes,7,rep,name=dlnproof_2,json=dlnproof2,proto3" json:"dlnproof_2,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	PaillierN  []byte                 `protobuf:"bytes,1,opt,name=paillier_n,json=paillierN,proto3" json:"paillier_n,omitempty"`
+	ModProof   [][]byte               `protobuf:"bytes,2,rep,name=modProof,proto3" json:"modProof,omitempty"`
+	NTilde     []byte                 `protobuf:"bytes,3,opt,name=n_tilde,json=nTilde,proto3" json:"n_tilde,omitempty"`
+	H1         []byte                 `protobuf:"bytes,4,opt,name=h1,proto3" json:"h1,omitempty"`
+	H2         []byte                 `protobuf:"bytes,5,opt,name=h2,proto3" json:"h2,omitempty"`
+	Dlnproof_1 [][]byte               `protobuf:"bytes,6,rep,name=dlnproof_1,json=dlnproof1,proto3" json:"dlnproof_1,omitempty"`
+	Dlnproof_2 [][]byte               `protobuf:"bytes,7,rep,name=dlnproof_2,json=dlnproof2,proto3" json:"dlnproof_2,omitempty"`
+	// ModProof attesting that n_tilde is a Blum integer (product of two
+	// safe primes). Added in v4 to close the smooth-subgroup NTilde
+	// injection path that DLN proofs alone cannot detect.
+	// Empty when the generator party ran with NoProofMod() compat mode; the
+	// verifier treats an unparseable proof as a warn-only fallback under
+	// NoProofMod(), or as a hard reject otherwise.
+	NTildeModProof [][]byte `protobuf:"bytes,8,rep,name=nTildeModProof,proto3" json:"nTildeModProof,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *DGRound2Message1) Reset() {
@@ -185,6 +192,13 @@ func (x *DGRound2Message1) GetDlnproof_1() [][]byte {
 func (x *DGRound2Message1) GetDlnproof_2() [][]byte {
 	if x != nil {
 		return x.Dlnproof_2
+	}
+	return nil
+}
+
+func (x *DGRound2Message1) GetNTildeModProof() [][]byte {
+	if x != nil {
+		return x.NTildeModProof
 	}
 	return nil
 }
@@ -407,7 +421,7 @@ const file_protob_ecdsa_resharing_proto_rawDesc = "" +
 	"\vecdsa_pub_x\x18\x01 \x01(\fR\tecdsaPubX\x12\x1e\n" +
 	"\vecdsa_pub_y\x18\x02 \x01(\fR\tecdsaPubY\x12!\n" +
 	"\fv_commitment\x18\x03 \x01(\fR\vvCommitment\x12\x12\n" +
-	"\x04ssid\x18\x04 \x01(\fR\x04ssid\"\xc4\x01\n" +
+	"\x04ssid\x18\x04 \x01(\fR\x04ssid\"\xec\x01\n" +
 	"\x10DGRound2Message1\x12\x1d\n" +
 	"\n" +
 	"paillier_n\x18\x01 \x01(\fR\tpaillierN\x12\x1a\n" +
@@ -418,7 +432,8 @@ const file_protob_ecdsa_resharing_proto_rawDesc = "" +
 	"\n" +
 	"dlnproof_1\x18\x06 \x03(\fR\tdlnproof1\x12\x1d\n" +
 	"\n" +
-	"dlnproof_2\x18\a \x03(\fR\tdlnproof2\"\x12\n" +
+	"dlnproof_2\x18\a \x03(\fR\tdlnproof2\x12&\n" +
+	"\x0enTildeModProof\x18\b \x03(\fR\x0enTildeModProof\"\x12\n" +
 	"\x10DGRound2Message2\"(\n" +
 	"\x10DGRound3Message1\x12\x14\n" +
 	"\x05share\x18\x01 \x01(\fR\x05share\"9\n" +

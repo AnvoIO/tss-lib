@@ -29,6 +29,13 @@ message DGRound2Message1 {
     bytes h2 = 5;
     repeated bytes dlnproof_1 = 6;
     repeated bytes dlnproof_2 = 7;
+    // ModProof attesting that n_tilde is a Blum integer (product of two
+    // safe primes). Added in v4 to close the smooth-subgroup NTilde
+    // injection path that DLN proofs alone cannot detect.
+    // Empty when the generator party ran with NoProofMod() compat mode; the
+    // verifier treats an unparseable proof as a warn-only fallback under
+    // NoProofMod(), or as a hard reject otherwise.
+    repeated bytes nTildeModProof = 8;
 }
 
 /*
