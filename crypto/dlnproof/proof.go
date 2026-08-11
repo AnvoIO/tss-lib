@@ -25,6 +25,11 @@ import (
 const Iterations = 128
 const MaxProofElementBytes = 512
 
+// verifyMinModulusBitLen is the minimum accepted bit length for the safe-prime
+// product N passed to Verify. It matches the keygen NTilde size so the verifier
+// rejects undersized moduli before running any modular operation.
+const verifyMinModulusBitLen = 2048
+
 type (
 	Proof struct {
 		Alpha,
@@ -56,39 +61,41 @@ func NewDLNProof(Session []byte, h1, h2, x, p, q, N *big.Int, rand io.Reader) *P
 }
 
 func (p *Proof) Verify(Session []byte, h1, h2, N *big.Int) bool {
-	if p == nil || h1 == nil || h2 == nil || N == nil {
+	if p == nil {
 		return false
 	}
-	if N.Sign() != 1 {
+	// N must be a plausible safe-prime-product NTilde before any modular
+	// operation: non-nil, positive, odd, composite, and at least
+	// verifyMinModulusBitLen long. This subsumes the earlier nil/positive
+	// guards and additionally rejects prime or undersized moduli that would
+	// trivially satisfy the relation.
+	if !common.IsUsableUnknownOrderModulus(N, verifyMinModulusBitLen) {
 		return false
 	}
 	modN := common.ModInt(N)
-	h1_ := new(big.Int).Mod(h1, N)
-	if h1_.Cmp(one) != 1 || h1_.Cmp(N) != -1 {
+	// h1, h2 must be canonical generator-shaped elements of Z_N* (1 < h < N and
+	// a unit) on their RAW bytes. The earlier (h mod N) reduction accepted
+	// non-canonical inputs such as h1+N whose residue landed in (1, N); because
+	// the Fiat-Shamir transcript hashes the raw h1/h2, bind them to canonical
+	// range here.
+	if !common.IsCanonicalGenerator(N, h1) || !common.IsCanonicalGenerator(N, h2) {
 		return false
 	}
-	h2_ := new(big.Int).Mod(h2, N)
-	if h2_.Cmp(one) != 1 || h2_.Cmp(N) != -1 {
-		return false
-	}
-	if h1_.Cmp(h2_) == 0 {
+	if h1.Cmp(h2) == 0 {
 		return false
 	}
 	for i := range p.T {
-		if p.T[i] == nil {
-			return false
-		}
-		a := new(big.Int).Mod(p.T[i], N)
-		if a.Cmp(one) != 1 || a.Cmp(N) != -1 {
+		// Bound the RAW (unreduced) response scalar T[i] to (1, N). Reducing via
+		// Mod(T[i], N) here would let an arbitrarily large raw exponent through
+		// into modN.Exp below (CPU-amplification DoS).
+		if p.T[i] == nil || p.T[i].Cmp(one) != 1 || p.T[i].Cmp(N) != -1 {
 			return false
 		}
 	}
 	for i := range p.Alpha {
-		if p.Alpha[i] == nil {
-			return false
-		}
-		a := new(big.Int).Mod(p.Alpha[i], N)
-		if a.Cmp(one) != 1 || a.Cmp(N) != -1 {
+		// Alpha[i] = h1^a[i] mod N is a non-trivial unit for honest provers;
+		// require the same canonical-generator shape on the raw value.
+		if !common.IsCanonicalGenerator(N, p.Alpha[i]) {
 			return false
 		}
 	}
@@ -96,9 +103,6 @@ func (p *Proof) Verify(Session []byte, h1, h2, N *big.Int) bool {
 	c := common.SHA512_256i_TAGGED(Session, msg...)
 	cIBI := new(big.Int)
 	for i := 0; i < Iterations; i++ {
-		if p.Alpha[i] == nil || p.T[i] == nil {
-			return false
-		}
 		cI := c.Bit(i)
 		cIBI = cIBI.SetInt64(int64(cI))
 		h1ExpTi := modN.Exp(h1, p.T[i])

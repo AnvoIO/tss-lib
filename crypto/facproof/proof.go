@@ -19,6 +19,10 @@ import (
 const (
 	ProofFacBytesParts   = 11
 	MaxProofElementBytes = 1024
+	// verifyMinModulusBitLen is the minimum accepted bit length for the
+	// unknown-order moduli N0 and NCap in Verify; it matches the keygen
+	// Paillier/NTilde size so undersized moduli are rejected up front.
+	verifyMinModulusBitLen = 2048
 )
 
 type (
@@ -127,8 +131,32 @@ func (pf *ProofFac) Verify(Session []byte, ec elliptic.Curve, N0, NCap, s, t *bi
 	if pf == nil || !pf.ValidateBasic() || ec == nil || N0 == nil || NCap == nil || s == nil || t == nil {
 		return false
 	}
-	if N0.Sign() != 1 {
+	// Both N0 (the Paillier modulus being attested) and NCap (the auxiliary
+	// safe-prime-product ring backing the commitments) must be usable
+	// unknown-order moduli; otherwise the modular operations below can
+	// degenerate, or a prime modulus can trivially satisfy the relation.
+	if !common.IsUsableUnknownOrderModulus(N0, verifyMinModulusBitLen) {
 		return false
+	}
+	if !common.IsUsableUnknownOrderModulus(NCap, verifyMinModulusBitLen) {
+		return false
+	}
+	// s, t are public generators of Z_NCap*; require canonical non-trivial unit
+	// membership and distinctness.
+	if !common.IsCanonicalGenerator(NCap, s) || !common.IsCanonicalGenerator(NCap, t) {
+		return false
+	}
+	if s.Cmp(t) == 0 {
+		return false
+	}
+	// P, Q, A, B, T are prover-supplied commitments consumed as raw integers by
+	// the equality checks below; require unit membership in Z_NCap* so a prover
+	// cannot submit non-unit / zero / >= NCap values that bypass the sigma
+	// relation's binding property.
+	for _, v := range []*big.Int{pf.P, pf.Q, pf.A, pf.B, pf.T} {
+		if !common.IsNumberInMultiplicativeGroup(NCap, v) {
+			return false
+		}
 	}
 
 	q := ec.Params().N
@@ -136,6 +164,12 @@ func (pf *ProofFac) Verify(Session []byte, ec elliptic.Curve, N0, NCap, s, t *bi
 	q3 = new(big.Int).Mul(q, q3)
 	sqrtN0 := new(big.Int).Sqrt(N0)
 	q3SqrtN0 := new(big.Int).Mul(q3, sqrtN0)
+	qNCap := new(big.Int).Mul(q, NCap)
+	qN0NCap := new(big.Int).Mul(qNCap, N0)
+	q3NCap := new(big.Int).Mul(q3, NCap)
+	q3N0NCap := new(big.Int).Mul(q3NCap, N0)
+	upperW := new(big.Int).Lsh(q3NCap, 1)   // 2 * q^3 * NCap
+	upperV := new(big.Int).Lsh(q3N0NCap, 2) // 4 * q^3 * N0 * NCap
 
 	// Fig 28. Range Check
 	if !common.IsInInterval(pf.Z1, q3SqrtN0) {
@@ -143,6 +177,22 @@ func (pf *ProofFac) Verify(Session []byte, ec elliptic.Curve, N0, NCap, s, t *bi
 	}
 
 	if !common.IsInInterval(pf.Z2, q3SqrtN0) {
+		return false
+	}
+	// Bound the remaining response scalars by their honest-sampling maxima so an
+	// attacker cannot feed oversized exponents into the modexps below
+	// (CPU-amplification DoS): W1/W2 < 2*q^3*NCap, Sigma < q*N0*NCap,
+	// V < 4*q^3*N0*NCap.
+	if !common.IsInInterval(pf.W1, upperW) {
+		return false
+	}
+	if !common.IsInInterval(pf.W2, upperW) {
+		return false
+	}
+	if !common.IsInInterval(pf.Sigma, qN0NCap) {
+		return false
+	}
+	if !common.IsInInterval(pf.V, upperV) {
 		return false
 	}
 
