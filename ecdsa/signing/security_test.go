@@ -23,6 +23,35 @@ import (
 	"github.com/AnvoIO/tss-lib/v4/tss"
 )
 
+// TestSSIDBindsTheMessage pins the message-binding half of the signing SSID.
+// Every input to getSSID except the session nonce and the message is fixed by
+// the committee's key material, so with a reused nonce the message is the only
+// thing keeping two runs of one committee apart — the shape a long-lived
+// Parameters object makes easiest to reach. The committee is loaded in-order
+// (not at random) so the three parties differ only in the message being signed.
+func TestSSIDBindsTheMessage(t *testing.T) {
+	newParty := func(m *big.Int) *LocalParty {
+		keys, signPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold + 1)
+		require.NoError(t, err, "should load keygen fixtures")
+		params, pErr := tss.NewParameters(tss.S256(), tss.NewPeerContext(signPIDs), signPIDs[0], len(signPIDs), testThreshold)
+		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
+		outCh := make(chan tss.Message, len(signPIDs)+2)
+		endCh := make(chan *common.SignatureData, 1)
+		return NewLocalParty(m, params, keys[0], outCh, endCh).(*LocalParty)
+	}
+
+	P1, P2, P3 := newParty(big.NewInt(42)), newParty(big.NewInt(43)), newParty(big.NewInt(42))
+	require.Nil(t, P1.Start(), "round 1 should compute an SSID")
+	require.Nil(t, P2.Start())
+	require.Nil(t, P3.Start())
+
+	assert.NotEqual(t, P1.temp.ssid, P2.temp.ssid,
+		"two messages under one nonce must not share an SSID")
+	assert.Equal(t, P1.temp.ssid, P3.temp.ssid,
+		"the same message under the same nonce must reproduce the SSID")
+}
+
 // runSigningE2E runs a full ECDSA signing protocol and returns the signature data.
 func runSigningE2E(t *testing.T, msg *big.Int) *common.SignatureData {
 	t.Helper()

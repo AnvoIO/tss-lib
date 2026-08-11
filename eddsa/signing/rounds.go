@@ -102,17 +102,27 @@ func (round *base) resetOK() {
 	}
 }
 
-// get ssid from local params
+// getSSID derives the session identifier from the local params. The message
+// being signed is part of the pre-image so that two runs of the same committee
+// over different messages can never share an SSID, including when the caller
+// reuses one session nonce. Everything else in the list is fixed by the key
+// material, so without the message the nonce would be the single source of
+// separation. temp.message holds the raw signed bytes (see round_3); it is bound
+// as a big.Int, matching how the ecdsa signer binds temp.m.
 func (round *base) getSSID() ([]byte, error) {
+	if round.temp.message == nil {
+		return nil, round.WrapError(errors.New("message to sign is not set"), round.PartyID())
+	}
 	ssidList := []*big.Int{round.EC().Params().P, round.EC().Params().N, round.EC().Params().Gx, round.EC().Params().Gy} // ec curve
 	ssidList = append(ssidList, round.Parties().IDs().Keys()...)                                                         // parties
 	BigXjList, err := crypto.FlattenECPoints(round.key.BigXj)
 	if err != nil {
 		return nil, round.WrapError(errors.New("read BigXj failed"), round.PartyID())
 	}
-	ssidList = append(ssidList, BigXjList...)                    // BigXj
-	ssidList = append(ssidList, big.NewInt(int64(round.number))) // round number
-	ssidList = append(ssidList, round.temp.ssidNonce)
+	ssidList = append(ssidList, BigXjList...)                              // BigXj
+	ssidList = append(ssidList, big.NewInt(int64(round.number)))           // round number
+	ssidList = append(ssidList, round.temp.ssidNonce)                      // caller-supplied session nonce
+	ssidList = append(ssidList, new(big.Int).SetBytes(round.temp.message)) // message being signed
 	ssid := common.SHA512_256i(ssidList...).Bytes()
 
 	return ssid, nil
