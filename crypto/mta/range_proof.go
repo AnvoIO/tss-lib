@@ -21,6 +21,10 @@ import (
 const (
 	RangeProofAliceBytesParts = 6
 	MaxProofElementBytes      = 1024
+	// verifyMinModulusBitLen matches the keygen wire-format check for the
+	// Paillier N and NTilde moduli (paillierBitsLen = 2048). Also used by
+	// ProofBobWC.Verify in proofs.go.
+	verifyMinModulusBitLen = 2048
 )
 
 var (
@@ -108,19 +112,37 @@ func RangeProofAliceFromBytes(bzs [][]byte) (*RangeProofAlice, error) {
 }
 
 func (pf *RangeProofAlice) Verify(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTilde, h1, h2, c *big.Int) bool {
-	if pf == nil || !pf.ValidateBasic() || ec == nil || pk == nil || NTilde == nil || h1 == nil || h2 == nil || c == nil {
+	if pf == nil || !pf.ValidateBasic() || ec == nil || pk == nil || pk.N == nil || NTilde == nil || h1 == nil || h2 == nil || c == nil {
 		return false
 	}
-	// Reject c where gcd(c, N) != 1 to prevent nil pointer dereference from c^(-e) in modular exponentiation.
-	// When gcd(c, N) != 1, the modular inverse doesn't exist and big.Int.Exp returns nil.
-	// This also covers the c == 0 case.
-	if new(big.Int).GCD(nil, nil, c, pk.N).Cmp(one) != 0 {
+	// pk.N and NTilde must both be plausible unknown-order moduli before any
+	// modular arithmetic runs (prevents prime / undersized / even / nil moduli
+	// from making downstream operations panic or trivially pass).
+	if !common.IsUsableUnknownOrderModulus(pk.N, verifyMinModulusBitLen) {
+		return false
+	}
+	if !common.IsUsableUnknownOrderModulus(NTilde, verifyMinModulusBitLen) {
+		return false
+	}
+	// h1, h2 are public NTilde generators agreed in keygen; require canonical
+	// non-trivial unit membership and distinctness.
+	if !common.IsCanonicalGenerator(NTilde, h1) || !common.IsCanonicalGenerator(NTilde, h2) || h1.Cmp(h2) == 0 {
+		return false
+	}
+	// c is the Paillier ciphertext from the peer. Require canonical encoding
+	// (in (0, N^2)) and gcd(c, N) == 1 — the latter prevents c^(-e) mod N^2 from
+	// returning nil when the modular inverse doesn't exist (also covers c == 0);
+	// the former rejects non-canonical c + k*N^2 that could bypass downstream
+	// invariants. Replaces the previous standalone gcd(c, N) check.
+	if !common.IsCanonicalPaillierCiphertext(c, pk.N) {
 		return false
 	}
 
 	q := ec.Params().N
 	q3 := new(big.Int).Mul(q, q)
 	q3 = new(big.Int).Mul(q, q3)
+	upperS2 := new(big.Int).Mul(q3, NTilde)
+	upperS2.Lsh(upperS2, 1)
 
 	if !common.IsInInterval(pf.Z, NTilde) {
 		return false
@@ -143,10 +165,22 @@ func (pf *RangeProofAlice) Verify(Session []byte, ec elliptic.Curve, pk *paillie
 	if new(big.Int).GCD(nil, nil, pf.W, NTilde).Cmp(one) != 0 {
 		return false
 	}
+	// Mirror of ProofBob/WC.Verify's gcd(S, N) check. Honest S = r^e * beta
+	// mod N is a unit (beta is sampled coprime to N, r in Z_N*); reject the
+	// non-unit case directly rather than relying on downstream equality checks.
+	if new(big.Int).GCD(nil, nil, pf.S, pk.N).Cmp(one) != 0 {
+		return false
+	}
 	if pf.S1.Cmp(q) == -1 {
 		return false
 	}
 	if pf.S2.Cmp(q) == -1 {
+		return false
+	}
+	// Upper bound derived from honest sampling: S2 = e*rho + gamma with
+	// rho < q*NTilde, gamma < q^3*NTilde, e < q, so S2 < 2*q^3*NTilde. Rejects
+	// attacker-controlled oversized exponents before any modexp (CPU-amplification DoS).
+	if pf.S2.Cmp(upperS2) >= 0 {
 		return false
 	}
 	if pf.S.Cmp(one) == 0 {

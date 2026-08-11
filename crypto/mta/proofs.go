@@ -205,12 +205,33 @@ func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.Pub
 	if X != nil && pf.U == nil {
 		return false
 	}
+	// pk.N and NTilde must be plausible unknown-order moduli before any modular
+	// arithmetic runs. NTilde and the public generators h1, h2 arrive from the
+	// peer's keygen output, so the verifier must validate canonical-group shape
+	// rather than trust the peer.
+	if !common.IsUsableUnknownOrderModulus(pk.N, verifyMinModulusBitLen) {
+		return false
+	}
+	if !common.IsUsableUnknownOrderModulus(NTilde, verifyMinModulusBitLen) {
+		return false
+	}
+	if !common.IsCanonicalGenerator(NTilde, h1) || !common.IsCanonicalGenerator(NTilde, h2) || h1.Cmp(h2) == 0 {
+		return false
+	}
+	// c1, c2 are Paillier ciphertexts from peers; reject non-canonical
+	// representations and any value sharing a factor with N (which would
+	// otherwise leak that factor through c^S1 mod N^2 or c^e mod N^2).
+	if !common.IsCanonicalPaillierCiphertext(c1, pk.N) || !common.IsCanonicalPaillierCiphertext(c2, pk.N) {
+		return false
+	}
 
 	q := ec.Params().N
 	q3 := new(big.Int).Mul(q, q)   // q^2
 	q3 = new(big.Int).Mul(q, q3)   // q^3
 	q7 := new(big.Int).Mul(q3, q3) // q^6
 	q7 = new(big.Int).Mul(q7, q)   // q^7
+	upperS2T2 := new(big.Int).Mul(q3, NTilde)
+	upperS2T2.Lsh(upperS2T2, 1)
 
 	if !common.IsInInterval(pf.Z, NTilde) {
 		return false
@@ -271,6 +292,16 @@ func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.Pub
 	if pf.T2.Cmp(q) == -1 {
 		return false
 	}
+	// Upper bounds derived from honest sampling: S2 = e*rho + rhoPrm and
+	// T2 = e*sigma + tau, with rho,sigma < q*NTilde, rhoPrm,tau < q^3*NTilde,
+	// e < q, so both are < 2*q^3*NTilde. Rejects attacker-controlled oversized
+	// exponents before any modexp (CPU-amplification DoS).
+	if pf.S2.Cmp(upperS2T2) >= 0 {
+		return false
+	}
+	if pf.T2.Cmp(upperS2T2) >= 0 {
+		return false
+	}
 
 	// 3.
 	if pf.S1.Cmp(q3) > 0 {
@@ -300,6 +331,16 @@ func (pf *ProofBobWC) Verify(Session []byte, ec elliptic.Curve, pk *paillier.Pub
 
 	// 4. runs only in the "with check" mode from Fig. 10
 	if X != nil {
+		// X and pf.U arrive from the peer (or a direct-API caller that can build
+		// malformed ECPoints via NewECPointNoCurveCheck). Require prime-order
+		// subgroup membership: ValidateInSubgroup is ValidateBasic plus a
+		// [curve.N]*P == identity check on composite-cofactor curves (e.g.
+		// Ed25519), where on-curve membership alone admits small-order points.
+		// The existing same-curve guard (in the challenge-hash block above) and
+		// the checked scalar-mults below still handle cross-curve / e==0 cases.
+		if !X.ValidateInSubgroup() || !pf.U.ValidateInSubgroup() {
+			return false
+		}
 		// pf.S1 is peer-supplied; S1 ≡ 0 (mod q) drives ScalarBaseMult to the point
 		// at infinity, which would panic. Use the checked variants and reject
 		// instead. e is a hash challenge (≈never 0), checked for uniformity.

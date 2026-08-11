@@ -76,7 +76,13 @@ func (round *round3) Start() *tss.Error {
 			KGDj := r2msg2.UnmarshalDeCommitment()
 			cmtDeCmt := commitments.HashCommitDecommit{C: KGCj, D: KGDj}
 			ok, flatPolyGs := cmtDeCmt.DeCommit()
-			if !ok || flatPolyGs == nil {
+			// SECURITY (SRC-2026-925): require exactly (threshold+1) VSS
+			// commitment points = (threshold+1)*2 flat coordinates. A 1-element
+			// decommitment [r] passes DeCommit (which returns an empty but
+			// non-nil slice) and previously reached PjVs[0] below, panicking the
+			// keygen goroutine ("index out of range [0] with length 0") with no
+			// fault attribution and no recover().
+			if !ok || flatPolyGs == nil || len(flatPolyGs) != (round.Threshold()+1)*2 {
 				ch <- vssOut{errors.New("de-commitment verify failed"), nil}
 				return
 			}

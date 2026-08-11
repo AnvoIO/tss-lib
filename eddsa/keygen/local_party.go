@@ -139,14 +139,36 @@ func (p *LocalParty) StoreMessage(msg tss.ParsedMessage) (bool, *tss.Error) {
 	}
 	fromPIdx, _ := p.params.Parties().IDs().IndexOf(msg.GetFrom())
 
-	// switch/case is necessary to store any messages beyond current round
-	// this does not handle message replays. we expect the caller to apply replay and spoofing protection.
+	// switch/case is necessary to store any messages beyond current round.
+	// Each branch rejects intra-session message replacement: once a peer's
+	// slot for a round is filled, a second message with different content is
+	// rejected. Idempotent identical re-sends (at-least-once transports) are
+	// tolerated via tss.IsSameMessage. The party's own self-echo is exempt
+	// because each round pre-populates its own outgoing slot before broadcast;
+	// newParameters guarantees p.PartyID().Index equals the committee position,
+	// which is the same key-derived index space as fromPIdx.
+	selfIdx := p.PartyID().Index
+	isDup := fromPIdx != selfIdx
+	dupErr := func() (bool, *tss.Error) {
+		return false, p.WrapError(
+			fmt.Errorf("duplicate %T from party %d", msg.Content(), fromPIdx),
+			msg.GetFrom())
+	}
 	switch msg.Content().(type) {
 	case *KGRound1Message:
+		if isDup && p.temp.kgRound1Messages[fromPIdx] != nil && !tss.IsSameMessage(p.temp.kgRound1Messages[fromPIdx], msg) {
+			return dupErr()
+		}
 		p.temp.kgRound1Messages[fromPIdx] = msg
 	case *KGRound2Message1:
+		if isDup && p.temp.kgRound2Message1s[fromPIdx] != nil && !tss.IsSameMessage(p.temp.kgRound2Message1s[fromPIdx], msg) {
+			return dupErr()
+		}
 		p.temp.kgRound2Message1s[fromPIdx] = msg
 	case *KGRound2Message2:
+		if isDup && p.temp.kgRound2Message2s[fromPIdx] != nil && !tss.IsSameMessage(p.temp.kgRound2Message2s[fromPIdx], msg) {
+			return dupErr()
+		}
 		p.temp.kgRound2Message2s[fromPIdx] = msg
 	default: // unrecognised message, just ignore!
 		common.Logger.Warningf("unrecognised message ignored: %v", msg)

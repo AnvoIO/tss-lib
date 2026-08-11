@@ -20,6 +20,7 @@ import (
 
 	"github.com/AnvoIO/tss-lib/v3/common"
 	"github.com/AnvoIO/tss-lib/v3/crypto"
+	"github.com/AnvoIO/tss-lib/v3/tss"
 )
 
 type (
@@ -61,6 +62,9 @@ func CheckIndexes(ec elliptic.Curve, indexes []*big.Int) ([]*big.Int, error) {
 // Returns a new array of secret shares created by Shamir's Secret Sharing Algorithm,
 // requiring a minimum number of shares to recreate, of length shares, from the input secret
 func Create(ec elliptic.Curve, threshold int, secret *big.Int, indexes []*big.Int, rand io.Reader) (Vs, Shares, error) {
+	if ec == nil || rand == nil {
+		return nil, nil, fmt.Errorf("vss Create: ec or rand == nil")
+	}
 	if secret == nil || indexes == nil {
 		return nil, nil, fmt.Errorf("vss secret or indexes == nil: %v %v", secret, indexes)
 	}
@@ -74,7 +78,10 @@ func Create(ec elliptic.Curve, threshold int, secret *big.Int, indexes []*big.In
 	}
 
 	num := len(indexes)
-	if num < threshold {
+	// Need at least threshold+1 distinct shares to reconstruct a
+	// degree-`threshold` polynomial; the old `num < threshold` check admitted
+	// num == threshold, producing an unreconstructable share set.
+	if num < threshold+1 {
 		return nil, nil, ErrNumSharesBelowThreshold
 	}
 
@@ -99,8 +106,13 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 		vs == nil || len(vs) != threshold+1 {
 		return false
 	}
+	// Every vs[j] arrives from attacker-controlled wire bytes. Require it to
+	// live on ec (tss.SameCurve, replacing the previous SetCurve mutation that
+	// silently re-attached the curve) and to pass ValidateInSubgroup, which
+	// rejects nil / off-curve / identity and, on composite-cofactor curves
+	// (Ed25519), low-order points outside the prime-order subgroup (ba34365).
 	for _, point := range vs {
-		if point == nil {
+		if point == nil || !tss.SameCurve(point.Curve(), ec) || !point.ValidateInSubgroup() {
 			return false
 		}
 	}
@@ -116,9 +128,10 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 	for j := 1; j <= threshold; j++ {
 		// t = k_i^j
 		t = modQ.Mul(t, share.ID)
-		// v = v * v_j^t
-		vjt := vs[j].SetCurve(ec).ScalarMult(t)
-		v, err = v.SetCurve(ec).Add(vjt)
+		// v = v * v_j^t; vs[j] and v are already validated to live on ec above,
+		// so no SetCurve mutation is needed here.
+		vjt := vs[j].ScalarMult(t)
+		v, err = v.Add(vjt)
 		if err != nil {
 			return false
 		}
@@ -135,13 +148,32 @@ func (share *Share) Verify(ec elliptic.Curve, threshold int, vs Vs) bool {
 }
 
 func (shares Shares) ReConstruct(ec elliptic.Curve) (secret *big.Int, err error) {
-	if shares != nil && shares[0].Threshold+1 > len(shares) {
+	if ec == nil {
+		return nil, errors.New("vss ReConstruct: ec == nil")
+	}
+	if len(shares) == 0 {
+		return nil, ErrNumSharesBelowThreshold
+	}
+	// Per-share validation up-front so the Lagrange loop below can assume
+	// non-nil IDs / Shares and a consistent threshold. Without these a non-nil
+	// but empty slice would panic on shares[0], and mixed-threshold or nil
+	// shares would nil-deref or silently mix distinct polynomials.
+	threshold := shares[0].Threshold
+	for i, share := range shares {
+		if share == nil || share.ID == nil || share.Share == nil {
+			return nil, fmt.Errorf("vss ReConstruct: nil share or share field at index %d", i)
+		}
+		if share.Threshold != threshold {
+			return nil, fmt.Errorf("vss ReConstruct: share %d has threshold %d, want %d", i, share.Threshold, threshold)
+		}
+	}
+	if threshold+1 > len(shares) {
 		return nil, ErrNumSharesBelowThreshold
 	}
 	modN := common.ModInt(ec.Params().N)
 
 	// x coords
-	xs := make([]*big.Int, 0)
+	xs := make([]*big.Int, 0, len(shares))
 	for _, share := range shares {
 		xs = append(xs, share.ID)
 	}

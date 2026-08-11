@@ -202,3 +202,178 @@ func TestVerifyRejectsCNilPanic(t *testing.T) {
 		proof.Verify(Session, tss.EC(), pk, NTildei, h1i, h2i, pk.NSquare())
 	}, "must not panic on c = N^2")
 }
+
+// mtaTestParty bundles a Paillier keypair and a valid NTilde/h1/h2 triple for
+// building honest MtA transcripts to tamper with.
+type mtaTestParty struct {
+	sk             *paillier.PrivateKey
+	pk             *paillier.PublicKey
+	NTilde, h1, h2 *big.Int
+}
+
+func newMtaTestParty(t *testing.T) *mtaTestParty {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	sk, pk, err := paillier.GenerateKeyPair(ctx, rand.Reader, testPaillierKeyLength)
+	assert.NoError(t, err)
+	primes := [2]*big.Int{
+		common.GetRandomPrimeInt(rand.Reader, testSafePrimeBits),
+		common.GetRandomPrimeInt(rand.Reader, testSafePrimeBits),
+	}
+	NTilde, h1, h2, err := crypto.GenerateNTildei(rand.Reader, primes)
+	assert.NoError(t, err)
+	return &mtaTestParty{sk: sk, pk: pk, NTilde: NTilde, h1: h1, h2: h2}
+}
+
+// buildBobTranscript constructs cA = Enc(a), cB = cA^b * Enc(betaPrm) and the
+// Bob witness (b, betaPrm, cRand) for a conforming run.
+func buildBobTranscript(t *testing.T, p *mtaTestParty) (cA, cB, b, betaPrm, cRand *big.Int) {
+	t.Helper()
+	q := tss.EC().Params().N
+	a := common.GetRandomPositiveInt(rand.Reader, q)
+	b = common.GetRandomPositiveInt(rand.Reader, q)
+	cA, _, err := p.pk.EncryptAndReturnRandomness(rand.Reader, a)
+	assert.NoError(t, err)
+	q5 := new(big.Int).Mul(q, q)
+	q5 = new(big.Int).Mul(q5, q5)
+	q5 = new(big.Int).Mul(q5, q)
+	betaPrm = common.GetRandomPositiveInt(rand.Reader, q5)
+	cBetaPrm, r, err := p.pk.EncryptAndReturnRandomness(rand.Reader, betaPrm)
+	assert.NoError(t, err)
+	cRand = r
+	cB, err = p.pk.HomoMult(b, cA)
+	assert.NoError(t, err)
+	cB, err = p.pk.HomoAdd(cB, cBetaPrm)
+	assert.NoError(t, err)
+	return cA, cB, b, betaPrm, cRand
+}
+
+// TestRangeProofAliceRejectsOversizedS2 pins the CPU-amplification DoS bound
+// S2 < 2*q^3*NTilde added to RangeProofAlice.Verify. Uses real moduli so the
+// rejection comes from the S2 bound, not the modulus/canonical-input checks.
+func TestRangeProofAliceRejectsOversizedS2(t *testing.T) {
+	q := tss.EC().Params().N
+	p := newMtaTestParty(t)
+	m := common.GetRandomPositiveInt(rand.Reader, q)
+	c, r, err := p.pk.EncryptAndReturnRandomness(rand.Reader, m)
+	assert.NoError(t, err)
+	proof, err := ProveRangeAlice(Session, tss.EC(), p.pk, c, p.NTilde, p.h1, p.h2, m, r, rand.Reader)
+	assert.NoError(t, err)
+	assert.True(t, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c), "sanity: honest proof must verify")
+
+	q3 := new(big.Int).Mul(q, q)
+	q3.Mul(q3, q)
+	upperS2 := new(big.Int).Mul(q3, p.NTilde)
+	upperS2.Lsh(upperS2, 1)
+
+	tampered := *proof
+	tampered.S2 = upperS2 // exactly the boundary 2*q^3*NTilde, rejected by the >= check
+	assert.False(t, tampered.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c),
+		"proof with oversized S2 must be rejected before exponentiation")
+}
+
+// TestProofBobRejectsOversizedS2T2 pins the same DoS bound S2,T2 < 2*q^3*NTilde
+// added to ProofBobWC.Verify (reached here via the non-WC ProofBob.Verify path).
+func TestProofBobRejectsOversizedS2T2(t *testing.T) {
+	q := tss.EC().Params().N
+	p := newMtaTestParty(t)
+	cA, cB, b, betaPrm, cRand := buildBobTranscript(t, p)
+	proof, err := ProveBob(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, cA, cB, b, betaPrm, cRand, rand.Reader)
+	assert.NoError(t, err)
+	assert.True(t, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, cA, cB), "sanity: honest proof must verify")
+
+	q3 := new(big.Int).Mul(q, q)
+	q3.Mul(q3, q)
+	upperS2T2 := new(big.Int).Mul(q3, p.NTilde)
+	upperS2T2.Lsh(upperS2T2, 1)
+
+	t.Run("oversized S2", func(tt *testing.T) {
+		bad := *proof
+		bad.S2 = upperS2T2
+		assert.False(tt, bad.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, cA, cB))
+	})
+	t.Run("oversized T2", func(tt *testing.T) {
+		bad := *proof
+		bad.T2 = upperS2T2
+		assert.False(tt, bad.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, cA, cB))
+	})
+}
+
+// TestRangeProofAliceVerifyRejectsMalformedInputs covers the public-input
+// validation (usable moduli, canonical generators, canonical ciphertext) and
+// the gcd(S, N) unit check added to RangeProofAlice.Verify.
+func TestRangeProofAliceVerifyRejectsMalformedInputs(t *testing.T) {
+	q := tss.EC().Params().N
+	p := newMtaTestParty(t)
+	m := common.GetRandomPositiveInt(rand.Reader, q)
+	c, r, err := p.sk.EncryptAndReturnRandomness(rand.Reader, m)
+	assert.NoError(t, err)
+	proof, err := ProveRangeAlice(Session, tss.EC(), p.pk, c, p.NTilde, p.h1, p.h2, m, r, rand.Reader)
+	assert.NoError(t, err)
+	assert.True(t, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c), "sanity: honest proof must verify")
+
+	t.Run("prime pk.N", func(tt *testing.T) {
+		primePk := &paillier.PublicKey{N: common.GetRandomPrimeInt(rand.Reader, 2048)}
+		assert.False(tt, proof.Verify(Session, tss.EC(), primePk, p.NTilde, p.h1, p.h2, c))
+	})
+	t.Run("prime NTilde", func(tt *testing.T) {
+		primeNTilde := common.GetRandomPrimeInt(rand.Reader, 2048)
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, primeNTilde, p.h1, p.h2, c))
+	})
+	t.Run("small NTilde", func(tt *testing.T) {
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, big.NewInt(101), p.h1, p.h2, c))
+	})
+	t.Run("h1 == h2", func(tt *testing.T) {
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h1, c))
+	})
+	t.Run("h1 == 1", func(tt *testing.T) {
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, big.NewInt(1), p.h2, c))
+	})
+	t.Run("c == 0", func(tt *testing.T) {
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, big.NewInt(0)))
+	})
+	t.Run("c >= N^2 (non-canonical)", func(tt *testing.T) {
+		nonCanonical := new(big.Int).Add(p.pk.NSquare(), c)
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, nonCanonical))
+	})
+	t.Run("S shares factor with pk.N", func(tt *testing.T) {
+		bad := *proof
+		// sk.P is a prime factor of pk.N, so gcd(sk.P, pk.N) = sk.P > 1 while
+		// sk.P < pk.N keeps IsInInterval(S, pk.N) satisfied.
+		bad.S = new(big.Int).Set(p.sk.P)
+		assert.False(tt, bad.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c))
+	})
+}
+
+// TestProofBobWCVerifyRejectsMalformedInputs covers the same public-input
+// validation on the with-check verifier.
+func TestProofBobWCVerifyRejectsMalformedInputs(t *testing.T) {
+	p := newMtaTestParty(t)
+	cA, cB, b, betaPrm, cRand := buildBobTranscript(t, p)
+	B := crypto.ScalarBaseMult(tss.EC(), b)
+	proof, err := ProveBobWC(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, cA, cB, b, betaPrm, cRand, B, rand.Reader)
+	assert.NoError(t, err)
+	assert.True(t, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, cA, cB, B), "sanity: honest WC proof must verify")
+
+	c1, c2, X := cA, cB, B
+
+	t.Run("prime pk.N", func(tt *testing.T) {
+		primePk := &paillier.PublicKey{N: common.GetRandomPrimeInt(rand.Reader, 2048)}
+		assert.False(tt, proof.Verify(Session, tss.EC(), primePk, p.NTilde, p.h1, p.h2, c1, c2, X))
+	})
+	t.Run("prime NTilde", func(tt *testing.T) {
+		primeNTilde := common.GetRandomPrimeInt(rand.Reader, 2048)
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, primeNTilde, p.h1, p.h2, c1, c2, X))
+	})
+	t.Run("h1 == h2", func(tt *testing.T) {
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h1, c1, c2, X))
+	})
+	t.Run("c1 == 0", func(tt *testing.T) {
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, big.NewInt(0), c2, X))
+	})
+	t.Run("c2 >= N^2 (non-canonical)", func(tt *testing.T) {
+		nonCanonical := new(big.Int).Add(p.pk.NSquare(), c2)
+		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c1, nonCanonical, X))
+	})
+}

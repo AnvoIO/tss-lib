@@ -59,7 +59,15 @@ func (round *round5) Start() *tss.Error {
 		}
 	}
 
-	R = R.ScalarMult(round.temp.thetaInverse)
+	// SECURITY (SRC-2026-641): thetaInverse is a deterministic modular inverse
+	// that can be degenerate; on the resulting identity point our fork's
+	// ScalarMult panics rather than returning nil. Route through the checked
+	// variant and attribute the failure instead of crashing before the R.X()
+	// dereference below.
+	R, err := R.ScalarMultChecked(round.temp.thetaInverse)
+	if err != nil {
+		return round.WrapError(errors2.Wrapf(err, "R.ScalarMult(thetaInverse)"))
+	}
 	N := round.Params().EC().Params().N
 	modN := common.ModInt(N)
 	rx := R.X()
@@ -82,7 +90,14 @@ func (round *round5) Start() *tss.Error {
 	if roI == nil {
 		return round.WrapError(errors.New("failed to generate random roi"))
 	}
-	rToSi := R.ScalarMult(si)
+	// SECURITY (SRC-2026-641): si is this party's signature share (si = m*k +
+	// r*sigma mod N) and can be zero mod N; R.ScalarMult(0) is the identity,
+	// which our fork's ScalarMult panics on before the rToSi.Add below. Route
+	// through the checked variant and attribute the failure instead of crashing.
+	rToSi, err := R.ScalarMultChecked(si)
+	if err != nil {
+		return round.WrapError(errors2.Wrapf(err, "R.ScalarMult(si)"))
+	}
 	liPoint := crypto.ScalarBaseMult(round.Params().EC(), li)
 	bigAi := crypto.ScalarBaseMult(round.Params().EC(), roI)
 	bigVi, err := rToSi.Add(liPoint)

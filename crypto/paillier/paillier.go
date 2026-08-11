@@ -36,6 +36,13 @@ const (
 	ProofIters         = 13
 	verifyPrimesUntil  = 1000 // Verify uses primes <1000
 	pQBitLenDifference = 3    // >1020-bit P-Q
+	// verifyMinModulusBitLen is the minimum Paillier modulus bit length accepted
+	// by Proof.Verify; matches the paillierBitsLen enforced by the keygen /
+	// resharing wire-format checks.
+	verifyMinModulusBitLen = 2048
+	// verifyPrimalityRounds is the number of Miller-Rabin rounds for the
+	// composite check in Proof.Verify (<=4^-30 false-positive rate).
+	verifyPrimalityRounds = 30
 )
 
 type (
@@ -221,7 +228,33 @@ func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) (Proo
 }
 
 func (pf Proof) Verify(pkN, k *big.Int, ecdsaPub *crypto2.ECPoint) (bool, error) {
+	// Input validation, up-front so malformed inputs cannot reach GenerateXs
+	// (which dereferences k / ecdsaPub and would loop without a sane pkN).
+	if pkN == nil || k == nil || ecdsaPub == nil || !ecdsaPub.ValidateBasic() {
+		return false, nil
+	}
+	if pkN.Sign() != 1 || pkN.Bit(0) == 0 || pkN.BitLen() < verifyMinModulusBitLen {
+		return false, nil
+	}
+	// Reject prime pkN. By Fermat's little theorem x^p == x (mod p) for every
+	// x in Z_p*, so a prover with a prime modulus can set pf[i] = xi (the
+	// verifier-derived challenge) and pass every iteration without proving any
+	// factorization. The trial-division goroutine below only catches factors
+	// < verifyPrimesUntil; this closes the gap for larger primes.
+	if pkN.ProbablyPrime(verifyPrimalityRounds) {
+		return false, nil
+	}
 	iters := ProofIters
+	// Every pf[i] must be a canonical unit in Z_{pkN}*; a zero or non-unit pf[i]
+	// has degenerate iteration cases and can leak gcd(pf[i], pkN) via the modexp.
+	for i := 0; i < iters; i++ {
+		if pf[i] == nil || pf[i].Sign() != 1 || pf[i].Cmp(pkN) != -1 {
+			return false, nil
+		}
+		if new(big.Int).GCD(nil, nil, pf[i], pkN).Cmp(one) != 0 {
+			return false, nil
+		}
+	}
 	pch, xch := make(chan bool, 1), make(chan []*big.Int, 1) // buffered to allow early exit
 	prms := primes.Until(verifyPrimesUntil).List()           // uses cache primed in init()
 	go func(ch chan<- bool) {

@@ -1,0 +1,123 @@
+// Copyright © 2026 Stratovera LLC and its contributors.
+// Copyright © 2019 Binance
+//
+// This file is part of the tss-lib project. The full copyright notice,
+// including terms governing use, modification, and redistribution, is
+// contained in the file LICENSE at the root of the source code distribution tree.
+
+package keygen
+
+import (
+	"crypto/rand"
+	"math/big"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/AnvoIO/tss-lib/v3/common"
+	cmts "github.com/AnvoIO/tss-lib/v3/crypto/commitments"
+	"github.com/AnvoIO/tss-lib/v3/crypto/schnorr"
+	"github.com/AnvoIO/tss-lib/v3/crypto/vss"
+	"github.com/AnvoIO/tss-lib/v3/tss"
+)
+
+// TestRound3RejectsEmptyDecommitment is the regression test for SRC-2026-925.
+//
+// A malicious EdDSA keygen participant commits in round 1 to only its
+// randomness `r` (C = H(r), no polynomial points) and broadcasts a round-2
+// decommitment of one element `[r]`. Before the fix, that decommitment passed
+// the round-3 guard `!ok || flatPolyGs == nil` (DeCommit returns an empty
+// *non-nil* slice), UnFlattenECPoints returned a zero-length slice, and
+// `proof.Verify(ContextJ, PjVs[0])` indexed element 0 of an empty slice,
+// panicking ("index out of range [0] with length 0") inside the un-recover()'d
+// keygen goroutine -- an unattributable, repeatable process crash.
+//
+// The fix (round_3.go) adds a length check; the malicious peer must now be
+// rejected with a normal *tss.Error (attributed to the sender), not a panic.
+func TestRound3RejectsEmptyDecommitment(t *testing.T) {
+	ec := tss.Edwards()
+	q := ec.Params().N
+
+	// 2-of-2 committee; party 0 is the honest victim, party 1 the attacker.
+	pIDs := tss.GenerateTestPartyIDs(2)
+	p2pCtx := tss.NewPeerContext(pIDs)
+	params, pErr := tss.NewParameters(ec, p2pCtx, pIDs[0], len(pIDs), 1)
+	assert.NoError(t, pErr)
+
+	ids := []*big.Int{pIDs[0].KeyInt(), pIDs[1].KeyInt()}
+
+	// Victim's own honest VSS + Schnorr proof (so round 3's pre-amble succeeds).
+	ui := common.GetRandomPositiveInt(rand.Reader, q)
+	vs, shares, err := vss.Create(ec, params.Threshold(), ui, ids, rand.Reader)
+	assert.NoError(t, err)
+	pii, err := schnorr.NewZKProof([]byte("ssid"), ui, vs[0], rand.Reader)
+	assert.NoError(t, err)
+
+	// Malicious party 1: commit to ONLY the randomness r, then decommit [r].
+	r := common.MustGetRandomInt(rand.Reader, 256)
+	evilCmt := cmts.NewHashCommitmentWithRandomness(r) // C = H(r), D = [r]
+	assert.Equal(t, 1, len(evilCmt.D), "attacker decommitment must be a single element [r]")
+
+	// Hand-build the victim's round 3 with a populated temp.
+	save := NewLocalPartySaveData(len(pIDs))
+	temp := localTempData{}
+	temp.ssid = []byte("ssid")
+	temp.ui = ui
+	temp.vs = vs
+	temp.shares = shares
+	temp.KGCs = make([]cmts.HashCommitment, len(pIDs))
+	temp.kgRound2Message1s = make([]tss.ParsedMessage, len(pIDs))
+	temp.kgRound2Message2s = make([]tss.ParsedMessage, len(pIDs))
+
+	// Attacker's commitment slot and the two round-2 messages it "sent".
+	temp.KGCs[1] = evilCmt.C
+	temp.kgRound2Message1s[1] = NewKGRound2Message1(pIDs[0], pIDs[1], shares[1])
+	temp.kgRound2Message2s[1] = NewKGRound2Message2(pIDs[1], evilCmt.D, pii)
+
+	out := make(chan tss.Message, len(pIDs))
+	end := make(chan *LocalPartySaveData, 1)
+	b := &base{
+		Parameters: params,
+		save:       &save,
+		temp:       &temp,
+		out:        out,
+		end:        end,
+		ok:         make([]bool, len(pIDs)),
+	}
+	round := &round3{&round2{&round1{b}}}
+
+	// Must NOT panic, and must reject the attacker with an attributed error.
+	var tssErr *tss.Error
+	assert.NotPanics(t, func() {
+		tssErr = round.Start()
+	}, "SRC-2026-925: empty decommitment must not panic the keygen goroutine")
+
+	assert.NotNil(t, tssErr, "round 3 must reject the single-element decommitment")
+	if tssErr != nil {
+		culprits := tssErr.Culprits()
+		assert.Len(t, culprits, 1)
+		if len(culprits) == 1 {
+			assert.Equal(t, pIDs[1].Id, culprits[0].Id, "the malicious sender must be attributed as the culprit")
+		}
+	}
+}
+
+// TestEmptyDecommitmentUnFlattenIsNonNil locks in the primitive facts the
+// SRC-2026-925 guard relies on: a single-element decommitment [r] verifies, and
+// unflattening it yields a zero-length but non-nil slice -- so the old
+// `flatPolyGs == nil` guard alone does NOT reject it. This documents WHY the
+// explicit length check is required.
+func TestEmptyDecommitmentUnFlattenIsNonNil(t *testing.T) {
+	r := common.MustGetRandomInt(rand.Reader, 256)
+	evil := cmts.NewHashCommitmentWithRandomness(r)
+
+	ok, flat := evil.DeCommit()
+	assert.True(t, ok, "commitment to [r] verifies")
+	assert.NotNil(t, flat, "DeCommit returns a non-nil slice")
+	assert.Len(t, flat, 0, "but it is empty -- the old nil-guard does not catch it")
+
+	// (threshold+1)*2 coordinates expected for any real VSS commitment; an empty
+	// slice fails that length check, which is what the fix enforces.
+	const expectedForThreshold1 = (1 + 1) * 2
+	assert.NotEqual(t, expectedForThreshold1, len(flat))
+}

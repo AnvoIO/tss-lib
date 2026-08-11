@@ -68,7 +68,14 @@ func PrepareForSigning(ec elliptic.Curve, i, pax int, xi *big.Int, ks []*big.Int
 				return nil, nil, fmt.Errorf("PrepareForSigning: ModInverse failed: %v", err)
 			}
 			iota := modQ.Mul(ksc, inv)
-			bigWj = bigWj.ScalarMult(iota)
+			// SECURITY (SRC-2026-641): a degenerate (identity) Lagrange result
+			// would make our fork's ScalarMult panic; route through the checked
+			// variant and surface the error rather than crashing (or, upstream,
+			// nil-dereferencing on the next chained op / downstream X()).
+			bigWj, err = bigWj.ScalarMultChecked(iota)
+			if err != nil {
+				return nil, nil, fmt.Errorf("PrepareForSigning: scalar mult produced a degenerate point at index %d: %w", j, err)
+			}
 		}
 		bigWs[j] = bigWj
 	}

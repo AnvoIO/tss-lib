@@ -7,6 +7,7 @@
 package tss
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"sync"
@@ -258,6 +259,30 @@ func BaseStart(p Party, task string, prepare ...func(Round) *Error) (err *Error)
 	}
 	common.Logger.Debugf("party %s: %s round %d finished", p.round().Params().PartyID(), task, 1)
 	return nil
+}
+
+// IsSameMessage reports whether two ParsedMessage values carry identical
+// content. Per-protocol StoreMessage implementations use it to distinguish
+// legitimate at-least-once redelivery (same content, idempotent) from
+// adversarial intra-session replacement (different content, which must be
+// rejected). Two messages are considered the same when they share a type and
+// their wire-encoded bytes match exactly.
+func IsSameMessage(a, b ParsedMessage) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	if a == b {
+		return true
+	}
+	if a.Type() != b.Type() {
+		return false
+	}
+	aBz, _, errA := a.WireBytes()
+	bBz, _, errB := b.WireBytes()
+	if errA != nil || errB != nil {
+		return false
+	}
+	return bytes.Equal(aBz, bBz)
 }
 
 // an implementation of Update that is shared across the different types of parties (keygen, signing, dynamic groups)
