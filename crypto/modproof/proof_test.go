@@ -75,6 +75,48 @@ func TestMod(test *testing.T) {
 	assert.True(test, ok, "proof must verify")
 }
 
+// TestProofScopeDoesNotAssertSafePrimeFactors documents a protocol boundary,
+// not a desired rejection: ProofMod.Verify receives only N and attests the
+// Blum-integer shape covered by this proof. It cannot establish that the hidden
+// prime factors P and Q are themselves safe primes.
+func TestProofScopeDoesNotAssertSafePrimeFactors(t *testing.T) {
+	newNonSafeBlumPrime := func() *big.Int {
+		for {
+			p, err := rand.Prime(rand.Reader, 1024)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if p.Bit(1) != 1 {
+				continue
+			}
+			half := new(big.Int).Rsh(new(big.Int).Sub(p, big.NewInt(1)), 1)
+			if !half.ProbablyPrime(64) {
+				return p
+			}
+		}
+	}
+
+	P := newNonSafeBlumPrime()
+	var Q, N *big.Int
+	for {
+		Q = newNonSafeBlumPrime()
+		if P.Cmp(Q) == 0 {
+			continue
+		}
+		N = new(big.Int).Mul(P, Q)
+		if N.BitLen() >= 2048 {
+			break
+		}
+	}
+
+	proof, err := NewProof([]byte("proof-scope/non-safe-factors"), N, P, Q, rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.True(t, proof.Verify([]byte("proof-scope/non-safe-factors"), N),
+		"the current proof scope is Blum-integer shape, not safe-primality of the hidden factors")
+}
+
 var (
 	one = big.NewInt(1)
 )

@@ -27,6 +27,15 @@ Applications must provide:
 
 `ParseWireMessage` rejects messages larger than 4 MiB. Transports should enforce an equal or smaller limit before buffering a complete message.
 
+### Modulus-proof scope
+
+`ProofMod` proves the Blum-integer shape covered by that protocol. It does not
+prove that the hidden factors are safe primes, balanced, or have non-smooth
+group order; those factors are not inputs to the verifier. Deployments whose
+threat model requires a malicious peer to prove those stronger hidden-factor
+properties need an independently reviewed setup/proof extension; v3.1.1 does
+not provide one.
+
 ## Release and maintenance controls
 
 Security-relevant releases should satisfy all of the following:

@@ -67,10 +67,11 @@ func (p *ECPoint) Add(p1 *ECPoint) (*ECPoint, error) {
 	// Add then surfaces as an error the caller can attribute to the responsible
 	// peer rather than crashing the process. Every Add call site already checks
 	// the returned error.
-	if p == nil || p1 == nil ||
-		p.coords[0] == nil || p.coords[1] == nil ||
-		p1.coords[0] == nil || p1.coords[1] == nil {
-		return nil, errors.New("ECPoint.Add: nil operand")
+	if p == nil || p1 == nil || !p.ValidateBasic() || !p1.ValidateBasic() {
+		return nil, errors.New("ECPoint.Add: invalid operand")
+	}
+	if !tss.SameCurve(p.curve, p1.curve) {
+		return nil, errors.New("ECPoint.Add: curve mismatch")
 	}
 	x, y := p.curve.Add(p.X(), p.Y(), p1.X(), p1.Y())
 	return NewECPoint(p.curve, x, y)
@@ -96,6 +97,12 @@ func (p *ECPoint) ScalarMult(k *big.Int) *ECPoint {
 // is off-curve and so is rejected by NewECPoint. Callers that may pass such a
 // scalar should use this variant and handle the error instead of crashing.
 func (p *ECPoint) ScalarMultChecked(k *big.Int) (*ECPoint, error) {
+	if p == nil || !p.ValidateBasic() {
+		return nil, errors.New("ScalarMultChecked: invalid point")
+	}
+	if k == nil || k.Sign() < 0 {
+		return nil, errors.New("ScalarMultChecked: scalar must be non-negative")
+	}
 	x, y := p.curve.ScalarMult(p.X(), p.Y(), k.Bytes())
 	newP, err := NewECPoint(p.curve, x, y)
 	if err != nil {
@@ -113,7 +120,7 @@ func (p *ECPoint) ToECDSAPubKey() *ecdsa.PublicKey {
 }
 
 func (p *ECPoint) IsOnCurve() bool {
-	return isOnCurve(p.curve, p.coords[0], p.coords[1])
+	return p != nil && isOnCurve(p.curve, p.coords[0], p.coords[1])
 }
 
 func (p *ECPoint) Curve() elliptic.Curve {
@@ -121,10 +128,13 @@ func (p *ECPoint) Curve() elliptic.Curve {
 }
 
 func (p *ECPoint) Equals(p2 *ECPoint) bool {
-	if p == nil || p2 == nil {
+	if p == nil || p2 == nil ||
+		p.coords[0] == nil || p.coords[1] == nil ||
+		p2.coords[0] == nil || p2.coords[1] == nil ||
+		!tss.SameCurve(p.curve, p2.curve) {
 		return false
 	}
-	return p.X().Cmp(p2.X()) == 0 && p.Y().Cmp(p2.Y()) == 0
+	return p.coords[0].Cmp(p2.coords[0]) == 0 && p.coords[1].Cmp(p2.coords[1]) == 0
 }
 
 func (p *ECPoint) SetCurve(curve elliptic.Curve) *ECPoint {
@@ -133,7 +143,9 @@ func (p *ECPoint) SetCurve(curve elliptic.Curve) *ECPoint {
 }
 
 func (p *ECPoint) ValidateBasic() bool {
-	return p != nil && p.coords[0] != nil && p.coords[1] != nil && p.IsOnCurve() && !p.IsIdentity()
+	return p != nil && p.curve != nil && p.curve.Params() != nil &&
+		p.curve.Params().N != nil && p.curve.Params().P != nil &&
+		p.coords[0] != nil && p.coords[1] != nil && p.IsOnCurve() && !p.IsIdentity()
 }
 
 // IsIdentity reports whether p is the identity element of its curve. It covers
@@ -172,7 +184,7 @@ func (p *ECPoint) IsIdentity() bool {
 //
 // Returns false for nil points or points whose [N]·p is not the identity.
 func (p *ECPoint) IsInPrimeOrderSubgroup() bool {
-	if p == nil || p.coords[0] == nil || p.coords[1] == nil || p.curve == nil {
+	if !p.ValidateBasic() {
 		return false
 	}
 	n := p.curve.Params().N
@@ -218,6 +230,12 @@ func ScalarBaseMult(curve elliptic.Curve, k *big.Int) *ECPoint {
 // ScalarBaseMultChecked multiplies the curve base point by k and returns an error,
 // rather than panicking, when the result is the point at infinity (k ≡ 0 mod N).
 func ScalarBaseMultChecked(curve elliptic.Curve, k *big.Int) (*ECPoint, error) {
+	if curve == nil || curve.Params() == nil || curve.Params().N == nil || curve.Params().P == nil {
+		return nil, errors.New("ScalarBaseMultChecked: invalid curve")
+	}
+	if k == nil || k.Sign() < 0 {
+		return nil, errors.New("ScalarBaseMultChecked: scalar must be non-negative")
+	}
 	x, y := curve.ScalarBaseMult(k.Bytes())
 	p, err := NewECPoint(curve, x, y)
 	if err != nil {
@@ -227,7 +245,7 @@ func ScalarBaseMultChecked(curve elliptic.Curve, k *big.Int) (*ECPoint, error) {
 }
 
 func isOnCurve(c elliptic.Curve, x, y *big.Int) bool {
-	if x == nil || y == nil {
+	if c == nil || c.Params() == nil || c.Params().P == nil || x == nil || y == nil {
 		return false
 	}
 	// Reject coordinates outside [0, P) to prevent non-canonical point

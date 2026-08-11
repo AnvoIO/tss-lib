@@ -3,28 +3,60 @@
 All notable changes to this project are documented here. This project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [v3.1.1] - 2026-08-11
+## [v3.1.1] - Unreleased (release candidate)
 
-v3.1.1 security-hardening release, published concurrently with v4.0.1. It is a
-wire- and transcript-compatible continuation of the v3.1 line: existing valid v3
-integrations interoperate unchanged. The breaking Fiat-Shamir, wire, and
-proof-format hardening carried by v4.0.1 is deliberately excluded here.
+v3.1.1 is a security-hardening release candidate planned for publication
+concurrently with v4.0.1. It is a wire- and transcript-compatible continuation
+of the v3.1 line: existing valid v3 integrations interoperate unchanged. The
+breaking Fiat-Shamir, wire, and proof-format hardening carried by v4.0.1 is
+deliberately excluded here.
+
+### Release status
+
+- Security review covered both commits in `117f3c3..bbea7d8`, followed by remediation and regression coverage for every concrete issue found.
+- The pre-remediation candidate tip `bbea7d8` must not be tagged. The final release commit and `v3.1.1` tag must include the review remediations and be maintainer-signed.
+- The remediated candidate passes the supported Go 1.25.12 unit and race suites, the Go 1.26 compatibility suite, `go vet`, `go build`, `go mod verify`, targeted fuzzing, dual-committee resharing tests, and `govulncheck` with no reachable or imported vulnerabilities.
+- The only remaining qualification is the documented ModProof security boundary below; deployments that require proof of stronger factor properties need an independently reviewed protocol extension before release.
+
+See the [release-candidate security review](security/2026-08-11-release-candidate-review.md)
+for scope, evidence, signature verification, findings, and command-level results.
 
 ### Fixed (security)
 
-- Reject the identity element and non-prime-order points in the EC-point proof verifiers.
+- Reject nil or invalid curves, coordinates, scalars, cross-curve operands, the identity element, and non-prime-order results throughout checked EC operations and EC-point proof verification.
 - Harden `paillier.Proof.Verify` against a prime-modulus Fermat bypass.
 - Make `GetRandomPositiveInt` return strictly positive values, and add group-membership and canonical-input validation helpers.
-- Make `ECPoint.Add` nil-safe and route degenerate signing scalar multiplications, including the round-5 signature share, through the checked (identity-rejecting) variants.
+- Make `ECPoint.Add` nil-safe and route degenerate signing scalar multiplications, including the round-5 signature share, through checked, identity-rejecting variants.
 - Reject intra-session message replacement in `StoreMessage`.
-- Harden VSS create/verify/reconstruct and reject short keygen decommitments.
+- Harden VSS create/verify/reconstruct against nil curves and shares, invalid or negative indexes, zero-residue share IDs, threshold overflow, identity commitments, and malformed inputs that previously panicked; reject short keygen decommitments.
 - Enforce group-membership and honest-sampling response-scalar bounds in the DLN and FacProof verifiers.
-- Validate MtA public inputs and bound response scalars and decrypted shares.
-- Deep-copy `LocalSecrets` in `BuildLocalSaveDataSubset` so re-sharing (round 5) and HD signing no longer alter the caller's own saved share through a shared pointer.
+- Validate MtA public inputs before transcript hashing, require Bob-WC points to use the expected curve, reject nil private inputs, and bound response scalars and decrypted shares.
+- Make `BaseParty.ValidateMessage` reject nil message content without dereferencing it in the error path.
+- Deep-copy `LocalSecrets` on every `BuildLocalSaveDataSubset` return path, including missing-signer fallback, so re-sharing (round 5) and HD signing cannot alter the caller's saved share through a shared pointer.
+
+### Maintenance
+
+- Raise the minimum supported Go patch release to 1.25.12; the former 1.25.0 floor has reachable standard-library advisories under `govulncheck`.
+
+### Security scope: ModProof
+
+`ProofMod` attests the implemented Blum-integer shape statement. It does not
+prove that the hidden factors are safe primes, that they are balanced, or that
+their induced group order has no small factors. This limitation is explicit and
+unchanged by the release review; a deployment whose malicious-peer model
+requires those stronger properties should not treat the current proof as
+providing them.
+
+### Verification
+
+- Full tests pass with Go 1.25.12 and Go 1.26.0; the full Go 1.25.12 suite also passes under the race detector.
+- `go vet ./...`, `go build ./...`, and `go mod verify` pass.
+- `govulncheck` reports no reachable or imported vulnerabilities on Go 1.25.12.
+- Targeted wire/secrets fuzzing and dual-committee resharing tests pass.
 
 ### Compatibility
 
-- Wire- and transcript-compatible with the v3 line (v3.0.x, v3.1.0). No protobuf or Fiat-Shamir transcript changes. Applications requiring the breaking proof-format hardening should adopt v4.0.1.
+- Wire- and transcript-compatible with the v3 line (v3.0.x, v3.1.0). No protobuf or Fiat-Shamir transcript changes. Applications requiring the breaking proof-format hardening should plan a coordinated migration to v4.0.1.
 
 ### Divergence from upstream: overlapping-committee resharing
 
@@ -172,12 +204,13 @@ of the audit report for full detail.
 
 ### Known limitations
 
-- **Modulus balance / unbalanced `N`:** the mod-proof proves Blum-ness and no small
-  factors, not factor *balance*; a 2048-bit `N = p·q` with one smallish factor can
-  pass both the mod-proof and the new bit-length floor. A real fix requires a
-  CGGMP/GG20-style range/balance proof (new ZK crypto, diverging from upstream), for a
-  narrow threat. Documented as a known limitation; not implemented absent a specific
-  threat. Applies to keygen as well as resharing.
+- **Modulus factor properties:** `ProofMod.Verify(Session, N)` receives only the
+  public modulus, so the proof attests Blum-integer shape but does not prove that
+  the factors are safe primes, balanced, or have non-smooth `(p-1)/2` and
+  `(q-1)/2` halves. A maliciously generated 2048-bit Blum modulus can therefore
+  satisfy the proof without those stronger properties. Establishing them requires
+  an independently reviewed factor-property/range proof and is outside this
+  release's protocol. Applies to keygen as well as resharing.
 
 ### Verification
 

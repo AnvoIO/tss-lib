@@ -376,4 +376,25 @@ func TestProofBobWCVerifyRejectsMalformedInputs(t *testing.T) {
 		nonCanonical := new(big.Int).Add(p.pk.NSquare(), c2)
 		assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c1, nonCanonical, X))
 	})
+	t.Run("X with nil coordinate", func(tt *testing.T) {
+		badX := crypto.NewECPointNoCurveCheck(tss.EC(), nil, X.Y())
+		assert.NotPanics(tt, func() {
+			assert.False(tt, proof.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c1, c2, badX))
+		})
+	})
+	t.Run("U with nil coordinate", func(tt *testing.T) {
+		bad := *proof
+		bad.U = crypto.NewECPointNoCurveCheck(tss.EC(), proof.U.X(), nil)
+		assert.NotPanics(tt, func() {
+			assert.False(tt, bad.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c1, c2, X))
+		})
+	})
+	t.Run("U curve mismatch", func(tt *testing.T) {
+		bad := *proof
+		ex, ey := tss.Edwards().ScalarBaseMult(big.NewInt(7).Bytes())
+		bad.U = crypto.NewECPointNoCurveCheck(tss.Edwards(), ex, ey)
+		assert.NotPanics(tt, func() {
+			assert.False(tt, bad.Verify(Session, tss.EC(), p.pk, p.NTilde, p.h1, p.h2, c1, c2, X))
+		})
+	})
 }

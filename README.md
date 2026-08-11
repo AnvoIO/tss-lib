@@ -18,13 +18,15 @@ Based on [bnb-chain/tss-lib](https://github.com/bnb-chain/tss-lib) with security
 This source tree is the wire-compatible v3 maintenance line:
 
 - Go module: `github.com/AnvoIO/tss-lib/v3`
-- Release branch: `release/v3.1.0`
-- Current release: `v3.1.0`
+- Release branch: `release/v3.1.1`
+- Current published release: `v3.1.0`
+- Candidate status: v3.1.1 security review and remediation complete; final signed release tag pending
 
-The breaking v4 API is released independently from its own branch and tag using
-module path `github.com/AnvoIO/tss-lib/v4`. It is not bundled into this source
-tree. Releasing v4 does not delete, replace, or invalidate tagged v3 source;
-future compatible v3 security fixes can continue from the v3 maintenance branch.
+The breaking v4 API is maintained independently from its own branch and tag
+using module path `github.com/AnvoIO/tss-lib/v4`; v4.0.1 is the corresponding
+release candidate. It is not bundled into this source tree. Releasing v4 does
+not delete, replace, or invalidate tagged v3 source; future compatible v3
+security fixes can continue from the v3 maintenance branch.
 
 Choose the major version through the Go import path. Do not mix v3 and v4
 participants in one keygen, signing, or resharing session. v3.1 preserves the v3
@@ -43,7 +45,7 @@ set a fresh positive session nonce for every run before migrating to v4.
 
 ## Requirements
 
-- Go 1.25+
+- Go 1.25.12 or later (use a currently supported, patched Go toolchain)
 - Protocol Buffers compiler (for regenerating wire format, not required to build)
 
 ## Building
