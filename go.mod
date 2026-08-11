@@ -44,3 +44,9 @@ require (
 replace github.com/agl/ed25519 => github.com/binance-chain/edwards25519 v0.0.0-20200305024217-f36fc4b53d43
 
 tool golang.org/x/vuln/cmd/govulncheck
+
+// v4.0.0 was a pre-rollout cut that shipped without the boundary/verifier
+// hardening finalized in v4.0.1. It already reached the module proxy and
+// checksum DB, so it cannot be deleted or re-tagged; retract it here so tooling
+// steers consumers to v4.0.1 instead.
+retract v4.0.0
