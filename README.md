@@ -196,13 +196,15 @@ Inbound transports should reject messages above 4 MiB before buffering; `ParseWi
 
 ## Releases
 
-### v4.0.0: mandatory sessions and immutable identities (breaking)
+### v4.0.0: retracted before rollout (do not use)
 
-Released concurrently with v3.1.0, v4.0.0 requires a fresh positive session nonce before every
-`Party.Start()`, removes the legacy session fallback, changes the module path to
-`/v4`, freezes committee and local identity snapshots, and narrows the public
-`Party` interface to serialized application entry points. See the
-[`CHANGELOG`](./CHANGELOG.md) for migration details.
+v4.0.0 was withdrawn before rollout and must not be used. Its signed tag remains
+immutable because the version reached the Go module proxy and checksum database;
+the active v4 module retracts it. The cut introduced mandatory positive session
+nonces, the `/v4` module path, immutable identity snapshots, and a narrowed
+`Party` interface, but v4 adoption must begin with v4.0.1 after that release is
+published. See the [`CHANGELOG`](./CHANGELOG.md) for the retained historical
+migration details.
 
 ### v3.1.0: wire-compatible security and maintenance release (separate v3 line)
 

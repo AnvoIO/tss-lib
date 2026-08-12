@@ -149,9 +149,13 @@ ported `bnb-chain/tss-lib#128` dual-committee fix — a deliberate, maintained
 divergence from upstream's disjoint-committee assumption. See the v4.0.1 entry
 for the mechanism.
 
-## [v4.0.0] - 2026-07-10
+## [v4.0.0] - 2026-07-10 (retracted before rollout)
 
-v4.0.0 breaking security release, published concurrently with v3.1.0.
+v4.0.0 was cut as the breaking counterpart to v3.1.0, but was withdrawn before
+rollout and must not be used. Its signed tag is retained because the version
+reached the Go module proxy and checksum database; `go.mod` retracts it so Go
+tooling can steer consumers to v4.0.1 after that version is published. The
+details below are retained only as historical migration context.
 
 ### Relationship to v3.1.0
 
