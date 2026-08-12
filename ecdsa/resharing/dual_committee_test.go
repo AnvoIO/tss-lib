@@ -43,10 +43,12 @@ import (
 //     MISALIGNED case is covered separately by TestResharing_DualCommitteeMember_MisalignedIndex.
 //
 // ECDSA-specific wrinkle vs. the EdDSA test: round 2 sets up Paillier material, so
-// the new-committee members run with SetNoProofMod/SetNoProofFac and carry fixture
-// pre-params (mirroring the ecdsa/resharing adversarial harness) to keep the test
-// fast. Each new-committee member needs a DISTINCT pre-param so the round-4 h1/h2
-// uniqueness check passes. Because the fixture keys are consecutive integers, the
+// the new-committee members request the test-only SetNoProofMod/SetNoProofFac
+// gates and carry fixture pre-params (mirroring the ecdsa/resharing adversarial
+// harness). Secure builds intentionally leave the proofs enabled, while the
+// fixtures still avoid slow safe-prime generation. Each new-committee member needs
+// a DISTINCT pre-param so the round-4 h1/h2 uniqueness check passes. Because the
+// fixture keys are consecutive integers, the
 // fresh members' keys collide with the other old members and every old party
 // becomes dual — so the old committee owns fixtures 0..len(old)-1 and the fresh
 // members draw from the fixtures beyond that range.
@@ -94,7 +96,8 @@ func TestResharing_DualCommitteeMember_SelfShareContinuity(t *testing.T) {
 	endCh := make(chan *keygen.LocalPartySaveData, len(oldPIDs)+newPCount)
 
 	// Exactly one LocalParty per unique party (keyed by KeyInt). New-committee
-	// members run with proof-gating off; the dual member is in the new committee too.
+	// members request test-only proof gating; secure builds keep proofs enabled.
+	// The dual member is in the new committee too.
 	partyByKey := make(map[string]*LocalParty)
 	var instances []*LocalParty
 	newInstance := func(pID *tss.PartyID, save keygen.LocalPartySaveData) *LocalParty {
@@ -271,9 +274,11 @@ func driveReshareToDone(
 	// prolonged silence means a party is stuck waiting for a message that will
 	// never arrive — the #128 failure mode (a dual member lost its self-dealt
 	// share). Resetting on every message/completion surfaces a stall in seconds
-	// instead of a fixed minutes-long deadline, while a healthy run (a few seconds,
-	// no gap near this long) never trips it.
-	const idleTimeout = 30 * time.Second
+	// instead of relying only on the process-wide deadline. Secure macOS ARM64 CI
+	// can spend more than 30 seconds in proof computation without emitting a wire
+	// message, so leave enough headroom for healthy compute-bound rounds while a
+	// regressed self-share still stalls indefinitely.
+	const idleTimeout = 2 * time.Minute
 	idle := time.NewTimer(idleTimeout)
 	defer idle.Stop()
 	bumpIdle := func() {

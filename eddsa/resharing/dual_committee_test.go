@@ -230,9 +230,10 @@ func driveReshareToDone(
 	// prolonged silence means a party is stuck waiting for a message that will
 	// never arrive — the #128 failure mode (a dual member lost its self-dealt
 	// share). Resetting on every message/completion surfaces a stall in seconds
-	// instead of a fixed minutes-long deadline, while a healthy run (well under a
-	// second, no gap near this long) never trips it.
-	const idleTimeout = 30 * time.Second
+	// instead of relying only on the process-wide deadline. Keep this aligned with
+	// the ECDSA harness so slower hosted architectures have headroom for
+	// compute-bound rounds while a regressed self-share still stalls indefinitely.
+	const idleTimeout = 2 * time.Minute
 	idle := time.NewTimer(idleTimeout)
 	defer idle.Stop()
 	bumpIdle := func() {
