@@ -65,11 +65,12 @@ func TestResharingRejectsSlotZeroPubKeySwap(t *testing.T) {
 
 	// Old slot 0 advertises the "honest" aggregate key; old slot 1 advertises a
 	// forged (different) one. The round-1 check compares them before any
-	// commitment/VSS is opened, so a dummy commitment value is sufficient.
+	// commitment/VSS is opened, so dummy commitment/ssid values are sufficient.
 	honestPub := crypto.ScalarBaseMult(ec, big.NewInt(11))
 	forgedPub := crypto.ScalarBaseMult(ec, big.NewInt(22))
-	msg0 := resharing.NewDGRound1Message(newPIDs, oldPIDs[0], honestPub, big.NewInt(1))
-	msg1 := resharing.NewDGRound1Message(newPIDs, oldPIDs[1], forgedPub, big.NewInt(1))
+	ssid := []byte("slot-zero-regression-ssid")
+	msg0 := resharing.NewDGRound1Message(newPIDs, oldPIDs[0], honestPub, big.NewInt(1), ssid, []byte("nonce-hash"))
+	msg1 := resharing.NewDGRound1Message(newPIDs, oldPIDs[1], forgedPub, big.NewInt(1), ssid, []byte("nonce-hash"))
 
 	for _, P := range newCommittee {
 		go test.SharedPartyUpdater(P, msg0, errCh)

@@ -56,6 +56,9 @@ type (
 		newXi     *big.Int
 		newKs     []*big.Int
 		newBigXjs []*crypto.ECPoint // Xj to save in round 5
+
+		ssid      []byte
+		ssidNonce *big.Int
 	}
 )
 
@@ -106,6 +109,9 @@ func (td *localTempData) Clear() {
 	}
 	if td.newXi != nil {
 		td.newXi.SetInt64(0)
+	}
+	if td.ssidNonce != nil {
+		td.ssidNonce.SetInt64(0)
 	}
 }
 

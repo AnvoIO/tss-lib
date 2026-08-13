@@ -10,6 +10,7 @@ package resharing
 import (
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/AnvoIO/tss-lib/v4/crypto"
 	"github.com/AnvoIO/tss-lib/v4/crypto/commitments"
@@ -46,6 +47,12 @@ func (round *round1) Start() *tss.Error {
 		round.allOldOK()
 	}
 
+	round.temp.ssidNonce = round.Params().SessionNonce()
+	ssid, err := round.getSSID()
+	if err != nil {
+		return round.WrapError(err)
+	}
+	round.temp.ssid = ssid
 	Pi := round.PartyID()
 	i, ok := round.ReSharingParams().OldPartyIndex()
 	if !ok {
@@ -74,7 +81,12 @@ func (round *round1) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, round.PartyID())
 	}
-	vCmt := commitments.NewHashCommitment(round.Rand(), flatVis...)
+	// Bind this reshare's ssid into the commitment as its first committed element.
+	// EdDSA resharing has no ZK proofs, so C/D is the only place a session
+	// identifier can anchor the VSS transcript: a commitment minted in another
+	// session (different committees/thresholds/nonce) fails the ssid check on
+	// decommit in round 4 rather than free-riding on an unbound opening.
+	vCmt := commitments.NewHashCommitment(round.Rand(), append([]*big.Int{new(big.Int).SetBytes(ssid)}, flatVis...)...)
 
 	// 4. populate temp data
 	round.temp.VD = vCmt.D
@@ -83,7 +95,7 @@ func (round *round1) Start() *tss.Error {
 	// 5. "broadcast" C_i to members of the NEW committee
 	r1msg := NewDGRound1Message(
 		round.NewParties().IDs().Exclude(round.PartyID()), round.PartyID(),
-		round.input.EDDSAPub, vCmt.C)
+		round.input.EDDSAPub, vCmt.C, ssid, sessionNonceHash(round.temp.ssidNonce))
 	round.temp.dgRound1Messages[i] = r1msg
 	round.out <- r1msg
 

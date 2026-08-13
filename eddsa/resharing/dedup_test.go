@@ -58,10 +58,11 @@ func TestStoreMessageRejectsCrossCommitteeReplacement(t *testing.T) {
 	a.NotEqual(0, p.PartyID().KeyInt().Cmp(oldPeer.KeyInt()), "precondition: identities differ")
 
 	pub := crypto.ScalarBaseMult(ec, big.NewInt(7))
+	ssid := []byte("test-ssid")
 	mkMsg := func(commitment int64) tss.ParsedMessage {
 		// DGRound1Message is an old-committee-sourced broadcast; `from` is the old
 		// peer whose old-index collides with this party's new-index.
-		return resharing.NewDGRound1Message(newPIDs, oldPeer, pub, big.NewInt(commitment))
+		return resharing.NewDGRound1Message(newPIDs, oldPeer, pub, big.NewInt(commitment), ssid, []byte("nonce-hash"))
 	}
 
 	// 1. First DGRound1Message from the old peer is accepted.

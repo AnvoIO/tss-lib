@@ -7,6 +7,11 @@
 package resharing
 
 import (
+	"errors"
+	"math/big"
+
+	"github.com/AnvoIO/tss-lib/v4/common"
+	"github.com/AnvoIO/tss-lib/v4/crypto"
 	"github.com/AnvoIO/tss-lib/v4/eddsa/keygen"
 	"github.com/AnvoIO/tss-lib/v4/tss"
 )
@@ -132,4 +137,59 @@ func (round *base) allNewOK() {
 	for j := range round.newOK {
 		round.newOK[j] = true
 	}
+}
+
+// getSSID derives this reshare's session identifier from local params. It is
+// computed by the OLD committee in round 1 (it reads the old share's public
+// material, which only the old committee holds) and declared to the new committee
+// on the wire; the new committee never recomputes it, it checks unanimity and the
+// companion session_nonce_hash instead.
+//
+// EdDSA resharing carries NO zero-knowledge proofs, so unlike ECDSA resharing
+// there is no ssid-bound proof context to anchor the transcript. The ssid is
+// therefore bound directly into the round-1 VSS hash commitment (see
+// round_1_old_step_1.go) and checked on decommit in round 4; this function fixes
+// what that ssid contains.
+func (round *base) getSSID() ([]byte, error) {
+	ssidList := []*big.Int{round.EC().Params().P, round.EC().Params().N, round.EC().Params().Gx, round.EC().Params().Gy} // ec curve
+	ssidList = append(ssidList, round.Parties().IDs().Keys()...)                                                         // OLD committee
+	// The NEW committee is the defining input of a reshare (it decides who
+	// receives the key) and both thresholds fix the polynomial degrees. Bind them
+	// so two reshares of the same key by the same old committee to different new
+	// committees (or thresholds) under one nonce cannot collide on the ssid, which
+	// is the only session anchor this proof-free protocol has.
+	ssidList = append(ssidList, round.NewParties().IDs().Keys()...) // NEW committee
+	BigXjList, err := crypto.FlattenECPoints(round.input.BigXj)
+	if err != nil {
+		return nil, round.WrapError(errors.New("read BigXj failed"), round.PartyID())
+	}
+	ssidList = append(ssidList, BigXjList...) // BigXj (per-party public shares)
+	if round.input.EDDSAPub != nil {
+		ssidList = append(ssidList, round.input.EDDSAPub.X(), round.input.EDDSAPub.Y()) // aggregate group key y
+	}
+	ssidList = append(ssidList, big.NewInt(int64(round.Threshold())))    // old reconstruction threshold
+	ssidList = append(ssidList, big.NewInt(int64(round.NewThreshold()))) // new reconstruction threshold
+	ssidList = append(ssidList, big.NewInt(int64(round.number)))         // round number
+	ssidList = append(ssidList, round.temp.ssidNonce)
+	ssid := common.SHA512_256i(ssidList...).Bytes()
+
+	return ssid, nil
+}
+
+// sessionNonceHash is what the old committee declares in round 1 and each new
+// committee party checks in round 2. It is a hash rather than the nonce itself so
+// the wire does not hand a passive observer the identifier of a session it is not
+// in; every party that IS in the session already holds the nonce and recomputes
+// this.
+//
+// SCOPE: this makes a transcript non-portable between sessions for a peer that
+// cannot forge messages. It does NOT authenticate the sender — nothing here signs
+// or MACs a message — so an adversary who can rewrite arbitrary bytes on the wire
+// can substitute the expected hash. Transport authentication remains the host's
+// job, exactly as it is for the rest of the protocol.
+func sessionNonceHash(nonce *big.Int) []byte {
+	if nonce == nil {
+		return nil
+	}
+	return common.SHA512_256i(nonce).Bytes()
 }

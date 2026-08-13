@@ -56,9 +56,21 @@ func (round *round4) Start() *tss.Error {
 
 		// 3. unpack flat "v" commitment content
 		vCmtDeCmt := commitments.HashCommitDecommit{C: vCj, D: vDj}
-		ok, flatVs := vCmtDeCmt.DeCommit()
-		if !ok || len(flatVs) != (round.NewThreshold()+1)*2 { // they're points so * 2
+		ok, decommitted := vCmtDeCmt.DeCommit()
+		// The old party bound its ssid as the first committed element in round 1,
+		// so a well-formed opening is [ssid, ...flatVs]. Check it against THIS new
+		// party's own ssid (adopted in round 2) before use: a commitment minted in
+		// another session fails the production DeCommit path here rather than being
+		// accepted on an unbound opening. EdDSA resharing carries no ZK proof that
+		// would otherwise catch a cross-session commitment.
+		if !ok || len(decommitted) < 1 || new(big.Int).SetBytes(round.temp.ssid).Cmp(decommitted[0]) != 0 {
 			common.Logger.Warningf("resharing v de-commitment verification failed for party %s", Pj)
+			vValidationCulprits = append(vValidationCulprits, Pj)
+			continue
+		}
+		flatVs := decommitted[1:]
+		if len(flatVs) != (round.NewThreshold()+1)*2 { // they're points so * 2
+			common.Logger.Warningf("resharing v de-commitment length check failed for party %s", Pj)
 			vValidationCulprits = append(vValidationCulprits, Pj)
 			continue
 		}
