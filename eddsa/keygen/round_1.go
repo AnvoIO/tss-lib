@@ -67,7 +67,10 @@ func (round *round1) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
-	cmt := cmts.NewHashCommitment(round.Rand(), pGFlat...)
+	// Bind this keygen's ssid into the commitment so C/D are non-malleably tied
+	// to the session: a commitment minted in another session fails the ssid check
+	// on decommit in round 3, instead of free-riding on the co-located proof.
+	cmt := cmts.NewHashCommitment(round.Rand(), append([]*big.Int{new(big.Int).SetBytes(round.temp.ssid)}, pGFlat...)...)
 
 	// for this P: SAVE
 	// - shareID

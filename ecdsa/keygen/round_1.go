@@ -38,6 +38,13 @@ func (round *round1) Start() *tss.Error {
 	round.started = true
 	round.resetOK()
 
+	// Compute the ssid up front so it can be bound into the VSS commitment below.
+	ssid, err := round.getSSID()
+	if err != nil {
+		return round.WrapError(errors.New("failed to generate ssid"))
+	}
+	round.temp.ssid = ssid
+
 	Pi := round.PartyID()
 	i := Pi.Index
 
@@ -64,7 +71,10 @@ func (round *round1) Start() *tss.Error {
 	if err != nil {
 		return round.WrapError(err, Pi)
 	}
-	cmt := cmts.NewHashCommitment(round.Rand(), pGFlat...)
+	// Bind this keygen's ssid into the commitment so C/D are non-malleably tied
+	// to the session: a commitment minted in another session fails the ssid check
+	// on decommit in round 3, instead of free-riding on the co-located proofs.
+	cmt := cmts.NewHashCommitment(round.Rand(), append([]*big.Int{new(big.Int).SetBytes(round.temp.ssid)}, pGFlat...)...)
 
 	// 4. generate Paillier public key E_i, private key and proof
 	// 5-7. generate safe primes for ZKPs used later on
@@ -97,11 +107,6 @@ func (round *round1) Start() *tss.Error {
 	// - our set of Shamir shares
 	round.save.ShareID = ids[i]
 	round.temp.vs = vs
-	ssid, err := round.getSSID()
-	if err != nil {
-		return round.WrapError(errors.New("failed to generate ssid"))
-	}
-	round.temp.ssid = ssid
 	round.temp.shares = shares
 
 	// generate the dlnproofs for keygen
