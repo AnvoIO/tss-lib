@@ -43,7 +43,24 @@ const (
 	// verifyPrimalityRounds is the number of Miller-Rabin rounds for the
 	// composite check in Proof.Verify (<=4^-30 false-positive rate).
 	verifyPrimalityRounds = 30
+	// fsDomainTag is the Fiat-Shamir domain separator folded into this proof's
+	// challenge derivation, alongside the caller-supplied Session. The GG18 Paillier
+	// key-proof was the only zero-knowledge proof in the library left outside the
+	// ssid + AnvoIO.tss-lib.v4.* tag regime; binding both makes its challenge
+	// per-session and per-party rather than a function of (k, N, y) alone.
+	//
+	// The AnvoIO.tss-lib.v4.* namespace is frozen once shipped: the exact bytes are
+	// mixed into every proof transcript, so changing the tag (or the "|" separator)
+	// invalidates all proofs of this type. A future wire break bumps the v4 segment.
+	fsDomainTag = "AnvoIO.tss-lib.v4.paillier-keyproof"
 )
+
+// fsSession returns the tagged Session bytes prepended to the key-proof challenge.
+// Wire-incompatible with any pre-tag transcript by design (the /v4 module bump
+// consumes this break).
+func fsSession(Session []byte) []byte {
+	return append([]byte(fsDomainTag+"|"), Session...)
+}
 
 type (
 	PublicKey struct {
@@ -210,10 +227,10 @@ func (privateKey *PrivateKey) Decrypt(c *big.Int) (m *big.Int, err error) {
 // An efficient non-interactive statistical zero-knowledge proof system for quasi-safe prime products.
 // In: In Proc. of the 5th ACM Conference on Computer and Communications Security (CCS-98. Citeseer (1998)
 
-func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) (Proof, error) {
+func (privateKey *PrivateKey) Proof(Session []byte, k *big.Int, ecdsaPub *crypto2.ECPoint) (Proof, error) {
 	var pi Proof
 	iters := ProofIters
-	xs := GenerateXs(iters, k, privateKey.N, ecdsaPub)
+	xs := GenerateXs(iters, k, privateKey.N, ecdsaPub, Session)
 	for i := 0; i < iters; i++ {
 		// PhiN is even, so this inverse takes the blinded even-modulus path
 		// (common/int.go modInverseEvenBlinded) rather than constant-time bigmod,
@@ -227,7 +244,7 @@ func (privateKey *PrivateKey) Proof(k *big.Int, ecdsaPub *crypto2.ECPoint) (Proo
 	return pi, nil
 }
 
-func (pf Proof) Verify(pkN, k *big.Int, ecdsaPub *crypto2.ECPoint) (bool, error) {
+func (pf Proof) Verify(Session []byte, pkN, k *big.Int, ecdsaPub *crypto2.ECPoint) (bool, error) {
 	// Input validation, up-front so malformed inputs cannot reach GenerateXs
 	// (which dereferences k / ecdsaPub and would loop without a sane pkN).
 	if pkN == nil || k == nil || ecdsaPub == nil || !ecdsaPub.ValidateBasic() {
@@ -268,7 +285,7 @@ func (pf Proof) Verify(pkN, k *big.Int, ecdsaPub *crypto2.ECPoint) (bool, error)
 		ch <- true
 	}(pch)
 	go func(ch chan<- []*big.Int) {
-		ch <- GenerateXs(iters, k, pkN, ecdsaPub)
+		ch <- GenerateXs(iters, k, pkN, ecdsaPub, Session)
 	}(xch)
 	for j := 0; j < 2; j++ {
 		select {
@@ -299,10 +316,15 @@ func L(u, N *big.Int) *big.Int {
 	return new(big.Int).Div(t, N)
 }
 
-// GenerateXs generates the challenges used in Paillier key Proof
-func GenerateXs(m int, k, N *big.Int, ecdsaPub *crypto2.ECPoint) []*big.Int {
+// GenerateXs generates the challenges used in Paillier key Proof. Session is the
+// per-party Fiat-Shamir context (ssid||index); it is folded, under a frozen domain
+// tag, into every challenge so the proof is bound to its session and prover rather
+// than being a pure function of (k, N, y). Prover and verifier must pass the same
+// Session, exactly as for the ssid||index contexts of the other proofs.
+func GenerateXs(m int, k, N *big.Int, ecdsaPub *crypto2.ECPoint, Session []byte) []*big.Int {
 	var i, n int
 	ret := make([]*big.Int, m)
+	sessionTag := fsSession(Session)
 	sX, sY := ecdsaPub.X(), ecdsaPub.Y()
 	kb, sXb, sYb, Nb := k.Bytes(), sX.Bytes(), sY.Bytes(), N.Bytes()
 	bits := N.BitLen()
@@ -318,7 +340,7 @@ func GenerateXs(m int, k, N *big.Int, ecdsaPub *crypto2.ECPoint) []*big.Int {
 		for j := 0; j < blocks; j++ {
 			go func(j int) {
 				jBz := []byte(strconv.Itoa(j))
-				hash := common.SHA512_256(ib, jBz, nb, kb, sXb, sYb, Nb)
+				hash := common.SHA512_256(sessionTag, ib, jBz, nb, kb, sXb, sYb, Nb)
 				chs[j] <- hash
 			}(j)
 		}

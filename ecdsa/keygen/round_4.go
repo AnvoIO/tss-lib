@@ -9,6 +9,7 @@ package keygen
 
 import (
 	"errors"
+	"math/big"
 
 	"github.com/AnvoIO/tss-lib/v4/common"
 	"github.com/AnvoIO/tss-lib/v4/crypto/paillier"
@@ -42,7 +43,10 @@ func (round *round4) Start() *tss.Error {
 		r3msg := msg.Content().(*KGRound3Message)
 		go func(prf paillier.Proof, j int, ch chan<- bool) {
 			ppk := round.save.PaillierPKs[j]
-			ok, err := prf.Verify(ppk.N, PIDs[j], ecdsaPub)
+			// ContextJ = framed(ssid, j): the same per-session, per-prover context
+			// prover j used to generate this key-proof in round 3.
+			ContextJ := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(j)))
+			ok, err := prf.Verify(ContextJ, ppk.N, PIDs[j], ecdsaPub)
 			if err != nil {
 				common.Logger.Error(round.WrapError(err, Ps[j]).Error())
 				ch <- false

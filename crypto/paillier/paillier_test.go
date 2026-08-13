@@ -125,16 +125,47 @@ func TestHomoAdd(t *testing.T) {
 	assert.Equal(t, new(big.Int).Add(num1, num2), plain)
 }
 
+// testSession is a stand-in for the per-party Fiat-Shamir context (ssid||index)
+// that keygen threads through the key-proof. Prover and verifier must agree on it.
+var testSession = []byte("paillier-keyproof-test-session")
+
 func TestProofVerify(t *testing.T) {
 	setUp(t)
 	ki := common.MustGetRandomInt(rand.Reader, 256)                     // index
 	ui := common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N) // ECDSA private
 	yX, yY := tss.EC().ScalarBaseMult(ui.Bytes())                       // ECDSA public
-	proof, err := privateKey.Proof(ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	proof, err := privateKey.Proof(testSession, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
 	assert.NoError(t, err)
-	res, err := proof.Verify(publicKey.N, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	res, err := proof.Verify(testSession, publicKey.N, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
 	assert.NoError(t, err)
 	assert.True(t, res, "proof verify result must be true")
+}
+
+// TestProofVerifyBindsSession pins the fix: the key-proof challenge now folds in
+// the caller's Session (ssid||index) under a frozen domain tag, so a proof
+// generated for one session must not verify under another. Before the Session was
+// threaded in, the challenge was a pure function of (k, N, y) and this
+// cross-session verification would have succeeded.
+func TestProofVerifyBindsSession(t *testing.T) {
+	setUp(t)
+	ki := common.MustGetRandomInt(rand.Reader, 256)
+	ui := common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N)
+	yX, yY := tss.EC().ScalarBaseMult(ui.Bytes())
+	pub := crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY)
+
+	sessionA := []byte("session-A")
+	sessionB := []byte("session-B")
+
+	proof, err := privateKey.Proof(sessionA, ki, pub)
+	assert.NoError(t, err)
+
+	okSame, err := proof.Verify(sessionA, publicKey.N, ki, pub)
+	assert.NoError(t, err)
+	assert.True(t, okSame, "a proof must verify under the session it was made for")
+
+	okCross, err := proof.Verify(sessionB, publicKey.N, ki, pub)
+	assert.NoError(t, err)
+	assert.False(t, okCross, "a proof must not verify under a different session")
 }
 
 func TestProofVerifyFail(t *testing.T) {
@@ -142,11 +173,11 @@ func TestProofVerifyFail(t *testing.T) {
 	ki := common.MustGetRandomInt(rand.Reader, 256)                     // index
 	ui := common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N) // ECDSA private
 	yX, yY := tss.EC().ScalarBaseMult(ui.Bytes())                       // ECDSA public
-	proof, err := privateKey.Proof(ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	proof, err := privateKey.Proof(testSession, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
 	assert.NoError(t, err)
 	last := proof[len(proof)-1]
 	last.Sub(last, big.NewInt(1))
-	res, err := proof.Verify(publicKey.N, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
+	res, err := proof.Verify(testSession, publicKey.N, ki, crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY))
 	assert.NoError(t, err)
 	assert.False(t, res, "proof verify result must be true")
 }
@@ -162,13 +193,13 @@ func TestProofVerifyRejectsPrimePkN(t *testing.T) {
 	pub := crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY)
 
 	primePkN := common.GetRandomPrimeInt(rand.Reader, 2048)
-	xs := GenerateXs(ProofIters, ki, primePkN, pub)
+	xs := GenerateXs(ProofIters, ki, primePkN, pub, testSession)
 	var forged Proof
 	for i := range forged {
 		forged[i] = new(big.Int).Mod(xs[i], primePkN)
 	}
 
-	res, err := forged.Verify(primePkN, ki, pub)
+	res, err := forged.Verify(testSession, primePkN, ki, pub)
 	assert.NoError(t, err)
 	assert.False(t, res, "Verify must reject a prime pkN even when iteration equality would otherwise hold")
 }
@@ -179,33 +210,33 @@ func TestProofVerifyRejectsMalformedInputs(t *testing.T) {
 	ui := common.GetRandomPositiveInt(rand.Reader, tss.EC().Params().N)
 	yX, yY := tss.EC().ScalarBaseMult(ui.Bytes())
 	pub := crypto.NewECPointNoCurveCheck(tss.EC(), yX, yY)
-	good, gerr := privateKey.Proof(ki, pub)
+	good, gerr := privateKey.Proof(testSession, ki, pub)
 	assert.NoError(t, gerr)
 
 	t.Run("nil pkN", func(t *testing.T) {
-		res, err := good.Verify(nil, ki, pub)
+		res, err := good.Verify(testSession, nil, ki, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
 	t.Run("nil k", func(t *testing.T) {
-		res, err := good.Verify(publicKey.N, nil, pub)
+		res, err := good.Verify(testSession, publicKey.N, nil, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
 	t.Run("nil ecdsaPub", func(t *testing.T) {
-		res, err := good.Verify(publicKey.N, ki, nil)
+		res, err := good.Verify(testSession, publicKey.N, ki, nil)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
 	t.Run("pkN too small", func(t *testing.T) {
 		small := big.NewInt(15) // 3*5, composite but tiny
-		res, err := good.Verify(small, ki, pub)
+		res, err := good.Verify(testSession, small, ki, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
 	t.Run("pkN even", func(t *testing.T) {
 		even := new(big.Int).Lsh(publicKey.N, 1) // shift to make even, keep bit length
-		res, err := good.Verify(even, ki, pub)
+		res, err := good.Verify(testSession, even, ki, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
@@ -213,7 +244,7 @@ func TestProofVerifyRejectsMalformedInputs(t *testing.T) {
 		var bad Proof
 		copy(bad[:], good[:])
 		bad[0] = nil
-		res, err := bad.Verify(publicKey.N, ki, pub)
+		res, err := bad.Verify(testSession, publicKey.N, ki, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
@@ -221,7 +252,7 @@ func TestProofVerifyRejectsMalformedInputs(t *testing.T) {
 		var bad Proof
 		copy(bad[:], good[:])
 		bad[0] = big.NewInt(0)
-		res, err := bad.Verify(publicKey.N, ki, pub)
+		res, err := bad.Verify(testSession, publicKey.N, ki, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
@@ -229,7 +260,7 @@ func TestProofVerifyRejectsMalformedInputs(t *testing.T) {
 		var bad Proof
 		copy(bad[:], good[:])
 		bad[0] = new(big.Int).Add(publicKey.N, big.NewInt(1)) // > N
-		res, err := bad.Verify(publicKey.N, ki, pub)
+		res, err := bad.Verify(testSession, publicKey.N, ki, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
@@ -238,7 +269,7 @@ func TestProofVerifyRejectsMalformedInputs(t *testing.T) {
 		copy(bad[:], good[:])
 		// privateKey.P is a prime factor of publicKey.N, so gcd(P, N) = P > 1
 		bad[0] = new(big.Int).Set(privateKey.P)
-		res, err := bad.Verify(publicKey.N, ki, pub)
+		res, err := bad.Verify(testSession, publicKey.N, ki, pub)
 		assert.NoError(t, err)
 		assert.False(t, res)
 	})
@@ -260,7 +291,7 @@ func TestGenerateXs(t *testing.T) {
 	sY := common.MustGetRandomInt(rand.Reader, 256)
 	N := common.GetRandomPrimeInt(rand.Reader, 2048)
 
-	xs := GenerateXs(13, k, N, crypto.NewECPointNoCurveCheck(tss.EC(), sX, sY))
+	xs := GenerateXs(13, k, N, crypto.NewECPointNoCurveCheck(tss.EC(), sX, sY), testSession)
 	assert.Equal(t, 13, len(xs))
 	for _, xi := range xs {
 		assert.True(t, common.IsNumberInMultiplicativeGroup(N, xi))

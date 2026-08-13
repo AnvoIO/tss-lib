@@ -258,7 +258,11 @@ func (round *round3) Start() *tss.Error {
 
 	// BROADCAST paillier proof for Pi
 	ki := round.PartyID().KeyInt()
-	proof, err := round.save.PaillierSK.Proof(ki, ecdsaPubKey)
+	// ContextI = framed(ssid, i): bind this key-proof to the session and this
+	// prover, matching the modproof/facproof contexts. The verifier (round 4)
+	// rebuilds framed(ssid, j) for prover j.
+	ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(round.PartyID().Index)))
+	proof, err := round.save.PaillierSK.Proof(ContextI, ki, ecdsaPubKey)
 	if err != nil {
 		return round.WrapError(err)
 	}
