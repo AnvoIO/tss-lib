@@ -38,10 +38,16 @@ func (round *round5) Start() *tss.Error {
 		SCj, SDj := r1msg2.UnmarshalCommitment(), r4msg.UnmarshalDeCommitment()
 		cmtDeCmt := commitments.HashCommitDecommit{C: SCj, D: SDj}
 		ok, bigGammaJ := cmtDeCmt.DeCommit()
-		if !ok || len(bigGammaJ) != 2 {
+		// Pj bound its ssid as the first committed element in round 1, so the
+		// opening is [ssid, Gx, Gy]. Reject a commitment minted in another session
+		// before using the point; all signers share one ssid, so compare to ours.
+		if !ok || len(bigGammaJ) < 1 || new(big.Int).SetBytes(round.temp.ssid).Cmp(bigGammaJ[0]) != 0 {
 			return round.WrapError(errors.New("commitment verify failed"), Pj)
 		}
-		bigGammaJPoint, err := crypto.NewECPoint(round.Params().EC(), bigGammaJ[0], bigGammaJ[1])
+		if len(bigGammaJ) != 3 {
+			return round.WrapError(errors.New("commitment verify failed"), Pj)
+		}
+		bigGammaJPoint, err := crypto.NewECPoint(round.Params().EC(), bigGammaJ[1], bigGammaJ[2])
 		if err != nil {
 			return round.WrapError(errors2.Wrapf(err, "NewECPoint(bigGammaJ)"), Pj)
 		}

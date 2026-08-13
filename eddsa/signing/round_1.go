@@ -10,6 +10,7 @@ package signing
 import (
 	"errors"
 	"fmt"
+	"math/big"
 
 	"github.com/AnvoIO/tss-lib/v4/common"
 	"github.com/AnvoIO/tss-lib/v4/crypto"
@@ -47,8 +48,11 @@ func (round *round1) Start() *tss.Error {
 	}
 
 	// 2. make commitment
+	// Bind this signing session's ssid as the first committed element so a round-1
+	// Ri commitment minted in another session fails the decommit check in round 3
+	// (all signers share one ssid, which binds the message, participants and nonce).
 	pointRi := crypto.ScalarBaseMult(round.Params().EC(), ri)
-	cmt := commitments.NewHashCommitment(round.Rand(), pointRi.X(), pointRi.Y())
+	cmt := commitments.NewHashCommitment(round.Rand(), new(big.Int).SetBytes(round.temp.ssid), pointRi.X(), pointRi.Y())
 
 	// 3. store r1 message pieces
 	round.temp.ri = ri

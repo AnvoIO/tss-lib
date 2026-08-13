@@ -42,10 +42,28 @@ func tamperEdDSASignAnyField(wireBytes []byte, targetMsgType string, tamperFn fu
 }
 
 func runAdversarialEdDSASigning(t *testing.T, updater func(tss.Party, tss.Message, chan<- *tss.Error)) *tss.Error {
+	return runAdversarialEdDSASigningBuilt(t, func([]keygen.LocalPartySaveData, tss.SortedPartyIDs, *big.Int) func(tss.Party, tss.Message, chan<- *tss.Error) {
+		return updater
+	})
+}
+
+// runAdversarialEdDSASigningBuilt is runAdversarialEdDSASigning but builds the
+// malicious updater AFTER the (randomly chosen) fixture set is loaded, so a test
+// can derive session-dependent values — notably this session's ssid — from the
+// exact keys, parties and message the honest signers will use. Needed now that the
+// round-1 commitment binds the ssid: a forged commitment must carry the real ssid
+// to be accepted far enough to exercise a later check (e.g. NewECPoint).
+func runAdversarialEdDSASigningBuilt(
+	t *testing.T,
+	build func(keys []keygen.LocalPartySaveData, signPIDs tss.SortedPartyIDs, msg *big.Int) func(tss.Party, tss.Message, chan<- *tss.Error),
+) *tss.Error {
 	t.Helper()
 
 	keys, signPIDs, err := keygen.LoadKeygenTestFixturesRandomSet(testThreshold+1, testParticipants)
 	require.NoError(t, err, "should load keygen fixtures")
+
+	msg := big.NewInt(200)
+	updater := build(keys, signPIDs, msg)
 
 	p2pCtx := tss.NewPeerContext(signPIDs)
 	parties := make([]*LocalParty, 0, len(signPIDs))
@@ -54,7 +72,6 @@ func runAdversarialEdDSASigning(t *testing.T, updater func(tss.Party, tss.Messag
 	outCh := make(chan tss.Message, len(signPIDs))
 	endCh := make(chan *common.SignatureData, len(signPIDs))
 
-	msg := big.NewInt(200)
 	for i := 0; i < len(signPIDs); i++ {
 		params, pErr := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[i], len(signPIDs), testThreshold)
 		require.NoError(t, pErr)
@@ -156,43 +173,70 @@ func TestAdversarial_EdDSA_Sign_OffCurveRj(t *testing.T) {
 		t.Fatal("precondition failed: (1,1) must be off the Edwards curve")
 	}
 
-	// Forge a single consistent commit/decommit pair over the off-curve point.
-	// Its C is injected into the adversary's round-1 message and its D into the
-	// round-2 message, so the honest party's DeCommit() opens successfully.
-	forged := commitments.NewHashCommitmentWithRandomness(big.NewInt(0xC0FFEE), offX, offY)
+	// The round-1 commitment now binds the ssid, so a consistent forged commitment
+	// must carry the real ssid to be accepted past the decommit check and actually
+	// reach NewECPoint(Rj). The adversary is a real signer and knows the ssid; build
+	// the updater once the (random) fixture set is loaded so we can reproduce it.
+	tssErr := runAdversarialEdDSASigningBuilt(t, func(keys []keygen.LocalPartySaveData, signPIDs tss.SortedPartyIDs, message *big.Int) func(tss.Party, tss.Message, chan<- *tss.Error) {
+		ssid := eddsaSigningSSIDForTest(t, keys, signPIDs, adversaryIdx, message)
 
-	updater := test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
-		wireBytes = tamperEdDSASignAnyField(wireBytes, "SignRound1Message", func(value []byte) []byte {
-			var msg SignRound1Message
-			if err := proto.Unmarshal(value, &msg); err != nil {
-				return value
-			}
-			msg.Commitment = forged.C.Bytes()
-			out, err := proto.Marshal(&msg)
-			if err != nil {
-				return value
-			}
-			return out
+		// Forge a single consistent commit/decommit pair over [ssid, off-curve point].
+		// Its C is injected into the adversary's round-1 message and its D into the
+		// round-2 message, so the honest party's DeCommit() opens successfully, the
+		// ssid check passes, and the off-curve point reaches NewECPoint(Rj).
+		forged := commitments.NewHashCommitmentWithRandomness(big.NewInt(0xC0FFEE), new(big.Int).SetBytes(ssid), offX, offY)
+
+		return test.MaliciousUpdater(adversaryIdx, func(wireBytes []byte, from *tss.PartyID, isBroadcast bool) []byte {
+			wireBytes = tamperEdDSASignAnyField(wireBytes, "SignRound1Message", func(value []byte) []byte {
+				var msg SignRound1Message
+				if err := proto.Unmarshal(value, &msg); err != nil {
+					return value
+				}
+				msg.Commitment = forged.C.Bytes()
+				out, err := proto.Marshal(&msg)
+				if err != nil {
+					return value
+				}
+				return out
+			})
+			wireBytes = tamperEdDSASignAnyField(wireBytes, "SignRound2Message", func(value []byte) []byte {
+				var msg SignRound2Message
+				if err := proto.Unmarshal(value, &msg); err != nil {
+					return value
+				}
+				msg.DeCommitment = common.BigIntsToBytes(forged.D)
+				out, err := proto.Marshal(&msg)
+				if err != nil {
+					return value
+				}
+				return out
+			})
+			return wireBytes
 		})
-		wireBytes = tamperEdDSASignAnyField(wireBytes, "SignRound2Message", func(value []byte) []byte {
-			var msg SignRound2Message
-			if err := proto.Unmarshal(value, &msg); err != nil {
-				return value
-			}
-			msg.DeCommitment = common.BigIntsToBytes(forged.D)
-			out, err := proto.Marshal(&msg)
-			if err != nil {
-				return value
-			}
-			return out
-		})
-		return wireBytes
 	})
-
-	tssErr := runAdversarialEdDSASigning(t, updater)
 	require.NotNil(t, tssErr, "protocol must reject off-curve Rj with an error, not panic")
 	t.Logf("Error: %s", tssErr)
 	assert.Contains(t, tssErr.Error(), "NewECPoint(Rj)", "off-curve Rj should be rejected at NewECPoint")
+}
+
+// eddsaSigningSSIDForTest reproduces the ssid a signer derives in round 1, using
+// the production getSSID over party idx's own key/params, so a test can forge a
+// session-bound commitment. It must match what the honest signers compute, so it
+// mirrors the harness exactly: same curve, parties, message and session nonce.
+func eddsaSigningSSIDForTest(t *testing.T, keys []keygen.LocalPartySaveData, signPIDs tss.SortedPartyIDs, idx int, message *big.Int) []byte {
+	t.Helper()
+	p2pCtx := tss.NewPeerContext(signPIDs)
+	params, err := tss.NewParameters(tss.Edwards(), p2pCtx, signPIDs[idx], len(signPIDs), testThreshold)
+	require.NoError(t, err)
+	params.SetSessionNonce(big.NewInt(1))
+	oc := make(chan tss.Message, len(signPIDs))
+	ec := make(chan *common.SignatureData, len(signPIDs))
+	P := NewLocalParty(message, params, keys[idx], oc, ec).(*LocalParty)
+	r1 := P.FirstRound().(*round1)
+	r1.temp.ssidNonce = params.SessionNonce()
+	ssid, err := r1.getSSID()
+	require.NoError(t, err)
+	return ssid
 }
 
 func TestAdversarial_EdDSA_Sign_CorruptedSi(t *testing.T) {

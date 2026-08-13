@@ -62,7 +62,10 @@ func (round *round1) Start() *tss.Error {
 	}
 
 	pointGamma := crypto.ScalarBaseMult(round.Params().EC(), gamma)
-	cmt := commitments.NewHashCommitment(round.Rand(), pointGamma.X(), pointGamma.Y())
+	// Bind this signing session's ssid as the first committed element so a round-1
+	// Gamma commitment minted in another session fails the decommit check in round 5
+	// (all signers share one ssid, which binds the message, participants and nonce).
+	cmt := commitments.NewHashCommitment(round.Rand(), new(big.Int).SetBytes(round.temp.ssid), pointGamma.X(), pointGamma.Y())
 	round.temp.k = k
 	round.temp.gamma = gamma
 	round.temp.pointGamma = pointGamma

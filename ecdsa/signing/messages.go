@@ -186,7 +186,9 @@ func NewSignRound4Message(
 
 func (m *SignRound4Message) ValidateBasic() bool {
 	return m != nil &&
-		common.NonEmptyMultiBytes(m.DeCommitment, 3) &&
+		// [r, ssid, Gx, Gy]: the round-1 Gamma commitment now binds the ssid as its
+		// first committed element, so the decommitment carries 4 parts, not 3.
+		common.NonEmptyMultiBytes(m.DeCommitment, 4) &&
 		common.NonEmptyBytes(m.ProofAlphaX) &&
 		common.NonEmptyBytes(m.ProofAlphaY) &&
 		common.NonEmptyBytes(m.ProofT)

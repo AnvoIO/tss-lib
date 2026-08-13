@@ -52,11 +52,17 @@ func (round *round3) Start() *tss.Error {
 			// malicious signer grief honest signers with un-attributable aborts.
 			return round.WrapError(errors.New("de-commitment verify failed"), Pj)
 		}
-		if len(coordinates) != 2 {
-			return round.WrapError(errors.New("length of de-commitment should be 2"), Pj)
+		// Pj bound its ssid as the first committed element in round 1, so the
+		// opening is [ssid, Rx, Ry]. Reject a commitment minted in another session
+		// before using the point; all signers share one ssid, so compare to ours.
+		if len(coordinates) < 1 || new(big.Int).SetBytes(round.temp.ssid).Cmp(coordinates[0]) != 0 {
+			return round.WrapError(errors.New("de-commitment session id mismatch"), Pj)
+		}
+		if len(coordinates) != 3 {
+			return round.WrapError(errors.New("length of de-commitment should be 3"), Pj)
 		}
 
-		Rj, err := crypto.NewECPoint(round.Params().EC(), coordinates[0], coordinates[1])
+		Rj, err := crypto.NewECPoint(round.Params().EC(), coordinates[1], coordinates[2])
 		if err != nil {
 			return round.WrapError(errors.Wrapf(err, "NewECPoint(Rj)"), Pj)
 		}

@@ -79,7 +79,9 @@ func NewSignRound2Message(
 
 func (m *SignRound2Message) ValidateBasic() bool {
 	return m != nil &&
-		common.NonEmptyMultiBytes(m.DeCommitment, 3) &&
+		// [r, ssid, Rx, Ry]: the round-1 Ri commitment now binds the ssid as its
+		// first committed element, so the decommitment carries 4 parts, not 3.
+		common.NonEmptyMultiBytes(m.DeCommitment, 4) &&
 		common.NonEmptyBytes(m.ProofAlphaX) &&
 		common.NonEmptyBytes(m.ProofAlphaY) &&
 		common.NonEmptyBytes(m.ProofT)

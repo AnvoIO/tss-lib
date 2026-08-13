@@ -50,17 +50,22 @@ func TestValidateBasic_SignRound2Message(t *testing.T) {
 		{"empty DeCommitment", &SignRound2Message{
 			DeCommitment: [][]byte{}, ProofAlphaX: []byte{0x01}, ProofAlphaY: []byte{0x01}, ProofT: []byte{0x01},
 		}, false},
+		{"wrong-length DeCommitment", &SignRound2Message{
+			// 3 parts is the pre-ssid-binding length; the round-1 commitment now
+			// binds the ssid, so a valid decommitment is [r, ssid, Rx, Ry] = 4.
+			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}}, ProofAlphaX: []byte{0x01}, ProofAlphaY: []byte{0x01}, ProofT: []byte{0x01},
+		}, false},
 		{"nil ProofAlphaX", &SignRound2Message{
-			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}}, ProofAlphaX: nil, ProofAlphaY: []byte{0x01}, ProofT: []byte{0x01},
+			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}, {0x04}}, ProofAlphaX: nil, ProofAlphaY: []byte{0x01}, ProofT: []byte{0x01},
 		}, false},
 		{"nil ProofAlphaY", &SignRound2Message{
-			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}}, ProofAlphaX: []byte{0x01}, ProofAlphaY: nil, ProofT: []byte{0x01},
+			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}, {0x04}}, ProofAlphaX: []byte{0x01}, ProofAlphaY: nil, ProofT: []byte{0x01},
 		}, false},
 		{"nil ProofT", &SignRound2Message{
-			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}}, ProofAlphaX: []byte{0x01}, ProofAlphaY: []byte{0x01}, ProofT: nil,
+			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}, {0x04}}, ProofAlphaX: []byte{0x01}, ProofAlphaY: []byte{0x01}, ProofT: nil,
 		}, false},
 		{"valid", &SignRound2Message{
-			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}}, ProofAlphaX: []byte{0x01}, ProofAlphaY: []byte{0x01}, ProofT: []byte{0x01},
+			DeCommitment: [][]byte{{0x01}, {0x02}, {0x03}, {0x04}}, ProofAlphaX: []byte{0x01}, ProofAlphaY: []byte{0x01}, ProofT: []byte{0x01},
 		}, true},
 	}
 	for _, tt := range tests {
