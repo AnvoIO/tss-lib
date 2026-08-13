@@ -34,8 +34,8 @@ wire-compatible with the live v3 releases.
 | --- | --- | --- |
 | Release intent | Wire-compatible v3 maintenance | Breaking hardening on the v4 line |
 | Go module | `github.com/AnvoIO/tss-lib/v3` | `github.com/AnvoIO/tss-lib/v4` |
-| Proof transcripts | Unchanged from v3 | Per-proof-type domain separation, uniform modproof sampling, message-bound signing SSID |
-| Keygen/resharing wire | Unchanged from v3 | New mandatory NTilde ModProof field |
+| Proof transcripts | Unchanged from v3 | Per-proof-type domain separation, uniform modproof sampling, message- and session-bound SSIDs, framed `ssid\|\|index` contexts, session-tagged Paillier key-proof |
+| Keygen/resharing wire | Unchanged from v3 | New mandatory NTilde ModProof field; resharing round-1 `ssid`/`session_nonce_hash` fields; ssid-bound VSS and signing commitments |
 
 ### Fixed (security)
 
@@ -62,10 +62,28 @@ Breaking Fiat-Shamir, wire, and proof-format hardening (v4.0.1 only; not in v3.1
 - Sample the modproof Fiat-Shamir challenges uniformly over Z_N via expand-then-reject, replacing a modular reduction that collapsed each challenge to a 256-bit subset for 2048-bit moduli.
 - Bind the message being signed into the signing SSID, so two runs of one committee over different messages cannot share a session identifier under a reused nonce.
 
+Session- and transcript-binding completeness. A coherent family of
+session/transcript-binding gaps — surfaced by a dedicated binding-completeness
+audit after earlier reviews had swept input validation but never binding
+completeness — closed together across keygen, signing and resharing on both
+curves. Each was defense-in-depth (structural backstops and the fresh-nonce
+contract already blocked key compromise), but together they make every proof and
+commitment transcript non-portable between sessions for a peer that cannot forge
+messages:
+
+- Bind the exact signed-message bytes — a length-sensitive digest of the `fullBytesLen`-padded message — into the ecdsa signing SSID, matching the eddsa side, so length- or leading-zero-distinct messages cannot collapse to one session identifier under a reused nonce.
+- Complete the keygen SSID on both curves: bind the reconstruction threshold, and bind the SSID into the round-1 VSS hash commitment (checked against the receiver's own SSID on decommit in round 3), so a commitment minted in another keygen is rejected rather than free-riding on the co-located proofs.
+- Complete the ecdsa resharing SSID: bind the new committee and both old and new thresholds, and add a per-execution `session_nonce_hash` to `DGRound1Message` that each new-committee party checks against its own session nonce in round 2. Together these stop two reshares of one key by one old committee — to different new committees, thresholds, or sessions — from sharing a session identifier or a transferable transcript.
+- Give eddsa resharing a session identifier for the first time (it previously had none): a `getSSID` over the curve, both committees, both thresholds, the public shares and the session nonce; that SSID bound into the round-1 VSS commitment and checked on decommit in round 4 (eddsa resharing carries no zero-knowledge proof to anchor the transcript otherwise); and `ssid` + `session_nonce_hash` fields on `DGRound1Message`, checked in round 2.
+- Bind the session SSID into the signing round-1 point commitment on both curves (ecdsa Gamma, eddsa Ri), checked on decommit, so a round-1 commitment captured from another signing session is rejected. The signing decommitment therefore carries one additional element.
+- Fold the caller session and a frozen `AnvoIO.tss-lib.v4.paillier-keyproof` domain tag into the GG18 Paillier key-proof challenge — the last zero-knowledge proof outside the ssid + `AnvoIO.tss-lib.v4.*` regime — so its challenge is per-session and per-party rather than a function of `(k, N, y)` alone.
+- Frame the per-party Fiat-Shamir `ssid||index` proof contexts with a fixed-width length prefix so the `(ssid, index)` pair is unambiguous; the previous delimiter-free concatenation was not injective across a variable-length ssid and a zero index.
+
 These change the keygen/resharing wire format (new proto fields) and the
 Fiat-Shamir transcript of every proof relative to v4.0.0. Every participant in a
 session must run v4.0.1; proofs minted by v4.0.0 or by the v3 line will not
-verify.
+verify. None of these change the stored keyshare format: existing shares stay
+loadable, signable and reshareable by an all-v4 committee with no migration.
 
 ### Security scope: NTilde ModProof
 
