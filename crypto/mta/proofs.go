@@ -427,6 +427,13 @@ func (pf *ProofBobWC) ValidateBasic() bool {
 }
 
 func (pf *ProofBob) Bytes() [ProofBobBytesParts][]byte {
+	// No error channel: the return type is a fixed array of byte slices. A nil
+	// field would fault inside (*big.Int).Bytes(); ValidateBasic is this type's
+	// own definition of well-formed, so a violation is an attributable panic
+	// rather than a proof that only looks serialisable.
+	if !pf.ValidateBasic() {
+		panic(fmt.Errorf("ProofBob.Bytes: receiver is nil or has a nil field; ValidateBasic must hold first"))
+	}
 	return [...][]byte{
 		pf.Z.Bytes(),
 		pf.ZPrm.Bytes(),
@@ -442,6 +449,13 @@ func (pf *ProofBob) Bytes() [ProofBobBytesParts][]byte {
 }
 
 func (pf *ProofBobWC) Bytes() [ProofBobWCBytesParts][]byte {
+	// Delegating to ProofBob.Bytes does not cover this form's own obligations:
+	// the embedded pointer must be non-nil to delegate at all, and pf.U must be
+	// non-nil before X()/Y() read its coordinates. ProofBobWC.ValidateBasic
+	// asserts exactly those on top of the embedded proof's own check.
+	if !pf.ValidateBasic() {
+		panic(fmt.Errorf("ProofBobWC.Bytes: receiver is nil, has a nil embedded ProofBob, a nil U, or a nil field; ValidateBasic must hold first"))
+	}
 	var out [ProofBobWCBytesParts][]byte
 	bobBzs := pf.ProofBob.Bytes()
 	bobBzsSlice := bobBzs[:]

@@ -131,6 +131,14 @@ func GenerateTestPartyIDs(count int, startAt ...int) SortedPartyIDs {
 func (spids SortedPartyIDs) Keys() []*big.Int {
 	ids := make([]*big.Int, spids.Len())
 	for i, pid := range spids {
+		// KeyInt is promoted through the embedded *MessageWrapper_PartyID, so it
+		// is that pointer the read dereferences. There is no safe substitute for
+		// a missing key: the slice is positional and 0 is the one value that must
+		// never appear (a party keyed 0 mod q would be dealt the Shamir secret
+		// itself), so an attributable panic is the only honest outcome.
+		if pid == nil || pid.MessageWrapper_PartyID == nil {
+			panic(fmt.Errorf("SortedPartyIDs.Keys: entry %d is a nil PartyID or has a nil embedded PartyID", i))
+		}
 		ids[i] = pid.KeyInt()
 	}
 	return ids
