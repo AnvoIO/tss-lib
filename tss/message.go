@@ -80,6 +80,21 @@ var (
 
 // NewMessageWrapper constructs a MessageWrapper from routing metadata and content
 func NewMessageWrapper(routing MessageRouting, content MessageContent) *MessageWrapper {
+	// Guard the nil-able values dereferenced below before doing any work. The
+	// `routing.To != nil` check further down guards only the CONTAINER, and
+	// routing.From had no check at all — yet each To element and From are
+	// dereferenced for their embedded PartyID. A nil here is a caller's malformed
+	// routing: fail attributably (this constructor has no error channel) rather
+	// than emit a message with a nil sender/recipient that the receiver rejects
+	// with no indication why.
+	if routing.From == nil || routing.From.MessageWrapper_PartyID == nil {
+		panic(fmt.Errorf("NewMessageWrapper: routing.From is a nil PartyID or has a nil embedded PartyID"))
+	}
+	for i := range routing.To {
+		if routing.To[i] == nil || routing.To[i].MessageWrapper_PartyID == nil {
+			panic(fmt.Errorf("NewMessageWrapper: routing.To[%d] is a nil PartyID or has a nil embedded PartyID", i))
+		}
+	}
 	// marshal the content to the ProtoBuf Any type
 	any, _ := anypb.New(content)
 	// convert given PartyIDs to the wire format
