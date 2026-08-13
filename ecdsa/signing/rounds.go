@@ -150,8 +150,28 @@ func (round *base) getSSID() ([]byte, error) {
 	ssidList = append(ssidList, round.key.H2j...)                // h2
 	ssidList = append(ssidList, big.NewInt(int64(round.number))) // round number
 	ssidList = append(ssidList, round.temp.ssidNonce)            // caller-supplied session nonce
-	ssidList = append(ssidList, round.temp.m)                    // message being signed
+	// Bind a length-sensitive digest of the EXACT bytes this session signs — the
+	// same encoding finalize records as data.M (temp.m, fixed to fullBytesLen
+	// when set). SHA512_256i hashes magnitudes only, so binding the bare scalar
+	// temp.m cannot separate two runs that differ solely in fullBytesLen while
+	// binding different byte strings. This mirrors the eddsa signer, which binds
+	// SHA512_256 of its exact message bytes for the same reason.
+	ssidList = append(ssidList, new(big.Int).SetBytes(common.SHA512_256(encodedMessage(round.temp.m, round.temp.fullBytesLen)))) // message being signed
 	ssid := common.SHA512_256i(ssidList...).Bytes()
 
 	return ssid, nil
+}
+
+// encodedMessage returns the exact message bytes this signer commits to: the
+// minimal big-endian encoding of m, or a fixed-width FillBytes encoding when
+// fullBytesLen is set. getSSID binds a digest of these bytes and finalize records
+// them as data.M, so the two share one definition of "the message" and cannot
+// disagree about it.
+func encodedMessage(m *big.Int, fullBytesLen int) []byte {
+	if fullBytesLen == 0 {
+		return m.Bytes()
+	}
+	mBytes := make([]byte, fullBytesLen)
+	m.FillBytes(mBytes)
+	return mBytes
 }

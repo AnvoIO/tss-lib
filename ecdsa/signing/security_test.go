@@ -52,6 +52,41 @@ func TestSSIDBindsTheMessage(t *testing.T) {
 		"the same message under the same nonce must reproduce the SSID")
 }
 
+// TestSSIDBindsTheMessageEncodingWidth pins the other half of the message
+// binding. fullBytesLen decides the exact bytes this session signs (finalize
+// records them as data.M), but SHA512_256i hashes magnitudes only, so binding
+// the bare scalar temp.m cannot separate two runs of one committee that share a
+// message value and a nonce yet differ in fullBytesLen. Without that separation a
+// proof minted under one SSID is accepted under the other. This mirrors the eddsa
+// signer, whose SSID binds a digest of its exact message bytes.
+func TestSSIDBindsTheMessageEncodingWidth(t *testing.T) {
+	newParty := func(m *big.Int, fullBytesLen ...int) *LocalParty {
+		keys, signPIDs, err := keygen.LoadKeygenTestFixtures(testThreshold + 1)
+		require.NoError(t, err, "should load keygen fixtures")
+		params, pErr := tss.NewParameters(tss.S256(), tss.NewPeerContext(signPIDs), signPIDs[0], len(signPIDs), testThreshold)
+		require.NoError(t, pErr)
+		params.SetSessionNonce(big.NewInt(1))
+		outCh := make(chan tss.Message, len(signPIDs)+2)
+		endCh := make(chan *common.SignatureData, 1)
+		return NewLocalParty(m, params, keys[0], outCh, endCh, fullBytesLen...).(*LocalParty)
+	}
+
+	// Same message value and nonce; the only difference is the encoding width.
+	minimal := newParty(big.NewInt(42))
+	widened := newParty(big.NewInt(42), 32)
+	require.Nil(t, minimal.Start())
+	require.Nil(t, widened.Start())
+
+	assert.NotEqual(t, minimal.temp.ssid, widened.temp.ssid,
+		"two runs signing different byte strings (differing only in fullBytesLen) must not share an SSID")
+
+	// Negative control: identical width must still reproduce the SSID.
+	widenedAgain := newParty(big.NewInt(42), 32)
+	require.Nil(t, widenedAgain.Start())
+	assert.Equal(t, widened.temp.ssid, widenedAgain.temp.ssid,
+		"the same message and width under the same nonce must reproduce the SSID")
+}
+
 // runSigningE2E runs a full ECDSA signing protocol and returns the signature data.
 func runSigningE2E(t *testing.T, msg *big.Int) *common.SignatureData {
 	t.Helper()
