@@ -80,8 +80,8 @@ func TestResharingRejectsSlotZeroPubKeySwap(t *testing.T) {
 	honestPub := crypto.ScalarBaseMult(ec, big.NewInt(11))
 	forgedPub := crypto.ScalarBaseMult(ec, big.NewInt(22))
 	ssid := []byte("slot-zero-regression-ssid")
-	msg0 := resharing.NewDGRound1Message(newPIDs, oldPIDs[0], honestPub, big.NewInt(1), ssid)
-	msg1 := resharing.NewDGRound1Message(newPIDs, oldPIDs[1], forgedPub, big.NewInt(1), ssid)
+	msg0 := resharing.NewDGRound1Message(newPIDs, oldPIDs[0], honestPub, big.NewInt(1), ssid, []byte("nonce-hash"))
+	msg1 := resharing.NewDGRound1Message(newPIDs, oldPIDs[1], forgedPub, big.NewInt(1), ssid, []byte("nonce-hash"))
 
 	for _, P := range newCommittee {
 		go test.SharedPartyUpdater(P, msg0, errCh)

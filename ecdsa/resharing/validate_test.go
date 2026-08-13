@@ -39,8 +39,12 @@ func TestValidateBasic_DGRound1Message(t *testing.T) {
 		{"nil EcdsaPubY", &DGRound1Message{
 			EcdsaPubX: []byte{0x01}, EcdsaPubY: nil, VCommitment: []byte{0x01},
 		}, false},
+		{"nil SessionNonceHash", &DGRound1Message{
+			EcdsaPubX: []byte{0x01}, EcdsaPubY: []byte{0x01}, VCommitment: []byte{0x01},
+		}, false},
 		{"valid", &DGRound1Message{
 			EcdsaPubX: []byte{0x01}, EcdsaPubY: []byte{0x01}, VCommitment: []byte{0x01},
+			SessionNonceHash: []byte{0x01},
 		}, true},
 	}
 	for _, tt := range tests {

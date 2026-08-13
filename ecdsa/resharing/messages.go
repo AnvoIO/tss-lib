@@ -44,6 +44,7 @@ func NewDGRound1Message(
 	ecdsaPub *crypto.ECPoint,
 	vct cmt.HashCommitment,
 	ssid []byte,
+	sessionNonceHash []byte,
 ) tss.ParsedMessage {
 	meta := tss.MessageRouting{
 		From:             from,
@@ -56,6 +57,9 @@ func NewDGRound1Message(
 		EcdsaPubY:   ecdsaPub.Y().Bytes(),
 		VCommitment: vct.Bytes(),
 		Ssid:        ssid,
+		// The new committee cannot recompute Ssid, so this is the only value in
+		// the message it can check against something of its own (round 2).
+		SessionNonceHash: sessionNonceHash,
 	}
 	msg := tss.NewMessageWrapper(meta, content)
 	return tss.NewMessage(meta, content, msg)
@@ -65,7 +69,11 @@ func (m *DGRound1Message) ValidateBasic() bool {
 	return m != nil &&
 		common.NonEmptyBytes(m.EcdsaPubX) &&
 		common.NonEmptyBytes(m.EcdsaPubY) &&
-		common.NonEmptyBytes(m.VCommitment)
+		common.NonEmptyBytes(m.VCommitment) &&
+		// Required, not optional: an absent hash is exactly what a transcript
+		// captured before this field existed carries, and it must not be laundered
+		// into "nothing to compare against" in round 2.
+		common.NonEmptyBytes(m.SessionNonceHash)
 }
 
 func (m *DGRound1Message) UnmarshalECDSAPub(ec elliptic.Curve) (*crypto.ECPoint, error) {
@@ -81,6 +89,10 @@ func (m *DGRound1Message) UnmarshalVCommitment() *big.Int {
 
 func (m *DGRound1Message) UnmarshalSSID() []byte {
 	return m.GetSsid()
+}
+
+func (m *DGRound1Message) UnmarshalSessionNonceHash() []byte {
+	return m.GetSessionNonceHash()
 }
 
 // ----- //

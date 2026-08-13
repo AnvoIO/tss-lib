@@ -89,7 +89,7 @@ func (round *round1) Start() *tss.Error {
 	// 5. "broadcast" C_i to members of the NEW committee
 	r1msg := NewDGRound1Message(
 		round.NewParties().IDs().Exclude(round.PartyID()), round.PartyID(),
-		round.input.ECDSAPub, vCmt.C, ssid)
+		round.input.ECDSAPub, vCmt.C, ssid, sessionNonceHash(round.temp.ssidNonce))
 	round.temp.dgRound1Messages[i] = r1msg
 	round.out <- r1msg
 

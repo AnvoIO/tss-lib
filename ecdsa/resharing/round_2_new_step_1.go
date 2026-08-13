@@ -44,6 +44,24 @@ func (round *round2) Start() *tss.Error {
 		return round.WrapError(errors.New("local party is not in the new committee"), Pi)
 	}
 
+	// Session binding: every old-committee round-1 message must declare a nonce
+	// hash equal to THIS new party's own. The ssid unanimity check below only
+	// compares the old committee's declarations to EACH OTHER, so a full transcript
+	// captured from another session is unanimous with itself and would pass it;
+	// this check, against a value only a same-session party holds (the new
+	// committee cannot recompute the old committee's ssid), is what rejects it.
+	nonce := round.Params().SessionNonce()
+	if nonce == nil || nonce.Sign() <= 0 {
+		return round.WrapError(errors.New("round 2: this party has no session nonce, so it cannot verify the old committee is in the same session; call Parameters.SetSessionNonce"), Pi)
+	}
+	wantNonceHash := sessionNonceHash(nonce)
+	for j, Pj := range round.OldParties().IDs() {
+		r1msg := round.temp.dgRound1Messages[j].Content().(*DGRound1Message)
+		if subtle.ConstantTimeCompare(r1msg.UnmarshalSessionNonceHash(), wantNonceHash) != 1 {
+			return round.WrapError(errors.New("round 2: an old committee member's session nonce hash does not match this party's; the two committees are not in the same session"), Pj)
+		}
+	}
+
 	// check consistency of SSID across the old committee. Slot 0 is only the
 	// reference value, not a privileged/validated anchor: on a mismatch the liar
 	// could be the slot-0 party (whose value is never itself checked) just as

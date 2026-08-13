@@ -29,13 +29,20 @@ const (
 
 // The Round 1 data is broadcast to peers of the New Committee in this message.
 type DGRound1Message struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	EcdsaPubX     []byte                 `protobuf:"bytes,1,opt,name=ecdsa_pub_x,json=ecdsaPubX,proto3" json:"ecdsa_pub_x,omitempty"`
-	EcdsaPubY     []byte                 `protobuf:"bytes,2,opt,name=ecdsa_pub_y,json=ecdsaPubY,proto3" json:"ecdsa_pub_y,omitempty"`
-	VCommitment   []byte                 `protobuf:"bytes,3,opt,name=v_commitment,json=vCommitment,proto3" json:"v_commitment,omitempty"`
-	Ssid          []byte                 `protobuf:"bytes,4,opt,name=ssid,proto3" json:"ssid,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	EcdsaPubX   []byte                 `protobuf:"bytes,1,opt,name=ecdsa_pub_x,json=ecdsaPubX,proto3" json:"ecdsa_pub_x,omitempty"`
+	EcdsaPubY   []byte                 `protobuf:"bytes,2,opt,name=ecdsa_pub_y,json=ecdsaPubY,proto3" json:"ecdsa_pub_y,omitempty"`
+	VCommitment []byte                 `protobuf:"bytes,3,opt,name=v_commitment,json=vCommitment,proto3" json:"v_commitment,omitempty"`
+	Ssid        []byte                 `protobuf:"bytes,4,opt,name=ssid,proto3" json:"ssid,omitempty"`
+	// Binds this message to the session the SENDER believes it is in. The new
+	// committee cannot recompute `ssid` -- its pre-image is the OLD committee's
+	// save data, which a new party does not hold -- so without this field the new
+	// committee has nothing of its own to check the old committee's declaration
+	// against. It is a hash, not the nonce, so the wire does not reveal the
+	// session identifier to a passive observer.
+	SessionNonceHash []byte `protobuf:"bytes,5,opt,name=session_nonce_hash,json=sessionNonceHash,proto3" json:"session_nonce_hash,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DGRound1Message) Reset() {
@@ -92,6 +99,13 @@ func (x *DGRound1Message) GetVCommitment() []byte {
 func (x *DGRound1Message) GetSsid() []byte {
 	if x != nil {
 		return x.Ssid
+	}
+	return nil
+}
+
+func (x *DGRound1Message) GetSessionNonceHash() []byte {
+	if x != nil {
+		return x.SessionNonceHash
 	}
 	return nil
 }
@@ -416,12 +430,13 @@ var File_protob_ecdsa_resharing_proto protoreflect.FileDescriptor
 
 const file_protob_ecdsa_resharing_proto_rawDesc = "" +
 	"\n" +
-	"\x1cprotob/ecdsa-resharing.proto\x12\x1ebinance.tsslib.ecdsa.resharing\"\x88\x01\n" +
+	"\x1cprotob/ecdsa-resharing.proto\x12\x1ebinance.tsslib.ecdsa.resharing\"\xb6\x01\n" +
 	"\x0fDGRound1Message\x12\x1e\n" +
 	"\vecdsa_pub_x\x18\x01 \x01(\fR\tecdsaPubX\x12\x1e\n" +
 	"\vecdsa_pub_y\x18\x02 \x01(\fR\tecdsaPubY\x12!\n" +
 	"\fv_commitment\x18\x03 \x01(\fR\vvCommitment\x12\x12\n" +
-	"\x04ssid\x18\x04 \x01(\fR\x04ssid\"\xec\x01\n" +
+	"\x04ssid\x18\x04 \x01(\fR\x04ssid\x12,\n" +
+	"\x12session_nonce_hash\x18\x05 \x01(\fR\x10sessionNonceHash\"\xec\x01\n" +
 	"\x10DGRound2Message1\x12\x1d\n" +
 	"\n" +
 	"paillier_n\x18\x01 \x01(\fR\tpaillierN\x12\x1a\n" +
