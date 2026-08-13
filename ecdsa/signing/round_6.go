@@ -12,6 +12,7 @@ import (
 
 	errors2 "github.com/pkg/errors"
 
+	"github.com/AnvoIO/tss-lib/v4/common"
 	"github.com/AnvoIO/tss-lib/v4/crypto/schnorr"
 	"github.com/AnvoIO/tss-lib/v4/tss"
 )
@@ -25,7 +26,7 @@ func (round *round6) Start() *tss.Error {
 	round.resetOK()
 
 	i := round.PartyID().Index
-	ContextI := append(round.temp.ssid, new(big.Int).SetUint64(uint64(i)).Bytes()...)
+	ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, new(big.Int).SetUint64(uint64(i)))
 	piAi, err := schnorr.NewZKProof(ContextI, round.temp.roi, round.temp.bigAi, round.Rand())
 	if err != nil {
 		return round.WrapError(errors2.Wrapf(err, "NewZKProof(roi, bigAi)"))

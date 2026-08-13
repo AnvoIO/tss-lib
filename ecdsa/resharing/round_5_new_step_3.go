@@ -33,7 +33,7 @@ func (round *round5) Start() *tss.Error {
 	if round.IsNewCommittee() {
 		// 21.
 		// for this P: SAVE data
-		ContextI := append(round.temp.ssid, big.NewInt(int64(i)).Bytes()...)
+		ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(i)))
 		round.save.BigXj = round.temp.newBigXjs
 		round.save.ShareID = round.PartyID().KeyInt()
 		round.save.Xi = new(big.Int).Set(round.temp.newXi)

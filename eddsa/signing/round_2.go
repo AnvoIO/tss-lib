@@ -12,6 +12,7 @@ import (
 
 	errors2 "github.com/pkg/errors"
 
+	"github.com/AnvoIO/tss-lib/v4/common"
 	"github.com/AnvoIO/tss-lib/v4/crypto/schnorr"
 	"github.com/AnvoIO/tss-lib/v4/tss"
 )
@@ -33,7 +34,7 @@ func (round *round2) Start() *tss.Error {
 	}
 
 	// 2. compute Schnorr prove
-	ContextI := append(round.temp.ssid, new(big.Int).SetUint64(uint64(i)).Bytes()...)
+	ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, new(big.Int).SetUint64(uint64(i)))
 	pir, err := schnorr.NewZKProof(ContextI, round.temp.ri, round.temp.pointRi, round.Rand())
 	if err != nil {
 		return round.WrapError(errors2.Wrapf(err, "NewZKProof(ri, pointRi)"))

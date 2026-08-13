@@ -359,3 +359,42 @@ func BenchmarkModInverseBigInt(b *testing.B) {
 		new(big.Int).ModInverse(base, mod)
 	}
 }
+
+// The deprecated AppendBigIntToBytesSlice is not injective: because it concatenates
+// with no delimiter, a shorter ssid with a larger index and a longer ssid with a
+// smaller index can land on the same bytes. This is the exact collision the framed
+// helper exists to prevent, so pin both halves down.
+func TestAppendBigIntToBytesSliceFramedIsInjective(t *testing.T) {
+	// ssidA||indexA and ssidB||indexB collide under the unframed concat:
+	//   [0x01,0x02] || 0x03      == 01 02 03
+	//   [0x01,0x02,0x03] || <0>  == 01 02 03   (0.Bytes() is empty)
+	ssidA, indexA := []byte{0x01, 0x02}, big.NewInt(3)
+	ssidB, indexB := []byte{0x01, 0x02, 0x03}, big.NewInt(0)
+
+	// Precondition: the deprecated helper really does collide these.
+	require.Equal(t, AppendBigIntToBytesSlice(ssidA, indexA), AppendBigIntToBytesSlice(ssidB, indexB),
+		"precondition: the unframed concat must collide these two (ssid, index) pairs")
+
+	// The framed helper must separate them.
+	assert.NotEqual(t, AppendBigIntToBytesSliceFramed(ssidA, indexA), AppendBigIntToBytesSliceFramed(ssidB, indexB),
+		"the framed helper must not collide two different (ssid, index) pairs")
+
+	// Determinism and per-field sensitivity.
+	assert.Equal(t, AppendBigIntToBytesSliceFramed(ssidA, indexA), AppendBigIntToBytesSliceFramed(ssidA, indexA),
+		"framing must be deterministic")
+	assert.NotEqual(t, AppendBigIntToBytesSliceFramed(ssidA, big.NewInt(3)), AppendBigIntToBytesSliceFramed(ssidA, big.NewInt(4)),
+		"different index must change the output")
+	assert.NotEqual(t, AppendBigIntToBytesSliceFramed([]byte{0x01}, indexA), AppendBigIntToBytesSliceFramed([]byte{0x02}, indexA),
+		"different ssid must change the output")
+
+	// index 0 (empty Bytes()) is still distinguishable from index that produces the
+	// ssid's trailing byte — the whole point of the frame.
+	assert.NotEqual(t, AppendBigIntToBytesSliceFramed(ssidA, big.NewInt(0)), AppendBigIntToBytesSliceFramed([]byte{0x01}, big.NewInt(2)),
+		"a zero index must not let one encoding masquerade as another")
+
+	// The frame is a 4-byte big-endian length prefix of the ssid, then ssid, then
+	// index bytes.
+	got := AppendBigIntToBytesSliceFramed(ssidA, indexA)
+	want := []byte{0x00, 0x00, 0x00, 0x02, 0x01, 0x02, 0x03}
+	assert.Equal(t, want, got, "unexpected framed layout")
+}

@@ -112,7 +112,7 @@ func (round *round2) Start() *tss.Error {
 
 	// 5. p2p send share ij to Pj
 	shares := round.temp.shares
-	ContextI := append(round.temp.ssid, big.NewInt(int64(i)).Bytes()...)
+	ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(i)))
 	for j, Pj := range round.Parties().IDs() {
 
 		facProof := &facproof.ProofFac{

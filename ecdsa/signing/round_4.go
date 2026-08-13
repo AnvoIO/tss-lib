@@ -48,7 +48,7 @@ func (round *round4) Start() *tss.Error {
 	}
 	thetaInverse = thetaInverseChecked
 	i := round.PartyID().Index
-	ContextI := append(round.temp.ssid, new(big.Int).SetUint64(uint64(i)).Bytes()...)
+	ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, new(big.Int).SetUint64(uint64(i)))
 	piGamma, err := schnorr.NewZKProof(ContextI, round.temp.gamma, round.temp.pointGamma, round.Rand())
 	if err != nil {
 		return round.WrapError(errors2.Wrapf(err, "NewZKProof(gamma, bigGamma)"))

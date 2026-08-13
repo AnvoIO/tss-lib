@@ -40,7 +40,7 @@ func (round *round3) Start() *tss.Error {
 			continue
 		}
 
-		ContextJ := common.AppendBigIntToBytesSlice(round.temp.ssid, big.NewInt(int64(j)))
+		ContextJ := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(j)))
 		msg := round.temp.signRound2Messages[j]
 		r2msg := msg.Content().(*SignRound2Message)
 		cmtDeCmt := commitments.HashCommitDecommit{C: round.temp.cjs[j], D: r2msg.UnmarshalDeCommitment()}

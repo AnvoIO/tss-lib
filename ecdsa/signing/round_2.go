@@ -13,6 +13,7 @@ import (
 
 	errorspkg "github.com/pkg/errors"
 
+	"github.com/AnvoIO/tss-lib/v4/common"
 	"github.com/AnvoIO/tss-lib/v4/crypto/mta"
 	"github.com/AnvoIO/tss-lib/v4/tss"
 )
@@ -31,7 +32,7 @@ func (round *round2) Start() *tss.Error {
 	errChs := make(chan *tss.Error, (len(round.Parties().IDs())-1)*2)
 	wg := sync.WaitGroup{}
 	wg.Add((len(round.Parties().IDs()) - 1) * 2)
-	ContextI := append(round.temp.ssid, new(big.Int).SetUint64(uint64(i)).Bytes()...)
+	ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, new(big.Int).SetUint64(uint64(i)))
 	for j, Pj := range round.Parties().IDs() {
 		if j == i {
 			continue

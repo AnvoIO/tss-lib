@@ -12,6 +12,7 @@ import (
 	"errors"
 	"math/big"
 
+	"github.com/AnvoIO/tss-lib/v4/common"
 	"github.com/AnvoIO/tss-lib/v4/crypto/modproof"
 
 	"github.com/AnvoIO/tss-lib/v4/crypto/dlnproof"
@@ -132,7 +133,7 @@ func (round *round2) Start() *tss.Error {
 	// and 2q+1 derived from LocalPreParams' Germain primes. The two-directional
 	// DLN proofs separately bind h1 and h2 to the same subgroup.
 	var nTildeModProof *modproof.ProofMod
-	ContextI := append(round.temp.ssid, big.NewInt(int64(i)).Bytes()...)
+	ContextI := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(i)))
 	if !round.Parameters.NoProofMod() {
 		var err error
 		modProof, err = modproof.NewProof(ContextI, preParams.PaillierSK.N, preParams.PaillierSK.P, preParams.PaillierSK.Q, round.Rand())

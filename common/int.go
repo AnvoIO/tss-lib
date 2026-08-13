@@ -9,6 +9,7 @@ package common
 
 import (
 	cryptorand "crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"math/big"
 	"sync"
@@ -254,9 +255,33 @@ func IsInIntervalPositive(b *big.Int, bound *big.Int) bool {
 	return b != nil && b.Sign() > 0 && b.Cmp(bound) < 0
 }
 
+// Deprecated: not injective, so unsafe for building Fiat-Shamir Session contexts.
+// It concatenates commonBytes||appended.Bytes() with no delimiter; commonBytes (an
+// ssid) is a variable-length big.Int hash with leading zeros stripped and
+// appended.Bytes() is empty for a zero index, so distinct (commonBytes, appended)
+// pairs can produce identical output and therefore share a proof challenge. Use
+// AppendBigIntToBytesSliceFramed instead. Retained only for API compatibility.
 func AppendBigIntToBytesSlice(commonBytes []byte, appended *big.Int) []byte {
 	resultBytes := make([]byte, len(commonBytes), len(commonBytes)+len(appended.Bytes()))
 	copy(resultBytes, commonBytes)
 	resultBytes = append(resultBytes, appended.Bytes()...)
+	return resultBytes
+}
+
+// AppendBigIntToBytesSliceFramed encodes (commonBytes, appended) unambiguously for
+// use as a per-party Fiat-Shamir Session context (ssid || index). A fixed-width
+// 4-byte big-endian length prefix on commonBytes makes its boundary explicit, so
+// reading back the length then that many bytes recovers commonBytes exactly and
+// the remainder is appended.Bytes(); the encoding is therefore injective in
+// (commonBytes, appended) for non-negative appended. Unlike the deprecated
+// AppendBigIntToBytesSlice, this cannot collide two different (ssid, index) pairs
+// onto one challenge, and it always allocates a fresh slice (never aliasing the
+// caller's ssid backing array the way a bare append(round.temp.ssid, …) can).
+func AppendBigIntToBytesSliceFramed(commonBytes []byte, appended *big.Int) []byte {
+	appendedBytes := appended.Bytes()
+	resultBytes := make([]byte, 4, 4+len(commonBytes)+len(appendedBytes))
+	binary.BigEndian.PutUint32(resultBytes, uint32(len(commonBytes)))
+	resultBytes = append(resultBytes, commonBytes...)
+	resultBytes = append(resultBytes, appendedBytes...)
 	return resultBytes
 }

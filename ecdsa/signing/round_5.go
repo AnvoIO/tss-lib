@@ -32,7 +32,7 @@ func (round *round5) Start() *tss.Error {
 		if j == round.PartyID().Index {
 			continue
 		}
-		ContextJ := common.AppendBigIntToBytesSlice(round.temp.ssid, big.NewInt(int64(j)))
+		ContextJ := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(j)))
 		r1msg2 := round.temp.signRound1Message2s[j].Content().(*SignRound1Message2)
 		r4msg := round.temp.signRound4Messages[j].Content().(*SignRound4Message)
 		SCj, SDj := r1msg2.UnmarshalCommitment(), r4msg.UnmarshalDeCommitment()

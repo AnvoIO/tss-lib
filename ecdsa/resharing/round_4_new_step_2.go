@@ -92,7 +92,7 @@ func (round *round4) Start() *tss.Error {
 		wg.Add(3)
 		go func(j int, msg tss.ParsedMessage, r2msg1 *DGRound2Message1) {
 			defer wg.Done()
-			ContextJ := common.AppendBigIntToBytesSlice(round.temp.ssid, big.NewInt(int64(j)))
+			ContextJ := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(j)))
 			modProof, err := r2msg1.UnmarshalModProof()
 			if err != nil {
 				if !round.Parameters.NoProofMod() {
@@ -282,7 +282,7 @@ func (round *round4) Start() *tss.Error {
 		if j == i {
 			continue
 		}
-		ContextJ := common.AppendBigIntToBytesSlice(round.temp.ssid, big.NewInt(int64(j)))
+		ContextJ := common.AppendBigIntToBytesSliceFramed(round.temp.ssid, big.NewInt(int64(j)))
 		facProof := &facproof.ProofFac{
 			P: zero, Q: zero, A: zero, B: zero, T: zero, Sigma: zero,
 			Z1: zero, Z2: zero, W1: zero, W2: zero, V: zero,
