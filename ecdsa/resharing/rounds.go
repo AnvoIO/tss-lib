@@ -142,16 +142,24 @@ func (round *base) allNewOK() {
 // get ssid from local params
 func (round *base) getSSID() ([]byte, error) {
 	ssidList := []*big.Int{round.EC().Params().P, round.EC().Params().N, round.EC().Params().B, round.EC().Params().Gx, round.EC().Params().Gy} // ec curve
-	ssidList = append(ssidList, round.Parties().IDs().Keys()...)                                                                                // parties
+	ssidList = append(ssidList, round.Parties().IDs().Keys()...)                                                                                // OLD committee
+	// The NEW committee is the defining input of a reshare (it decides who
+	// receives the key) and both thresholds fix the polynomial degrees. Bind them
+	// so two reshares of the same key by the same old committee to different new
+	// committees (or thresholds) cannot collide on the ssid — a collision makes
+	// every ssid||index proof context (mod/fac/dln) transferable between the runs.
+	ssidList = append(ssidList, round.NewParties().IDs().Keys()...) // NEW committee
 	BigXjList, err := crypto.FlattenECPoints(round.input.BigXj)
 	if err != nil {
 		return nil, round.WrapError(errors.New("read BigXj failed"), round.PartyID())
 	}
-	ssidList = append(ssidList, BigXjList...)                    // BigXj
-	ssidList = append(ssidList, round.input.NTildej...)          // NTilde
-	ssidList = append(ssidList, round.input.H1j...)              // h1
-	ssidList = append(ssidList, round.input.H2j...)              // h2
-	ssidList = append(ssidList, big.NewInt(int64(round.number))) // round number
+	ssidList = append(ssidList, BigXjList...)                            // BigXj
+	ssidList = append(ssidList, round.input.NTildej...)                 // NTilde
+	ssidList = append(ssidList, round.input.H1j...)                     // h1
+	ssidList = append(ssidList, round.input.H2j...)                     // h2
+	ssidList = append(ssidList, big.NewInt(int64(round.Threshold())))    // old reconstruction threshold
+	ssidList = append(ssidList, big.NewInt(int64(round.NewThreshold()))) // new reconstruction threshold
+	ssidList = append(ssidList, big.NewInt(int64(round.number)))        // round number
 	ssidList = append(ssidList, round.temp.ssidNonce)
 	ssid := common.SHA512_256i(ssidList...).Bytes()
 
