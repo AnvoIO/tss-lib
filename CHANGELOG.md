@@ -17,7 +17,7 @@ additional hardening below.
 
 - Security review covered all 39 commits in `6c1f2c3..599c5e8` (`master` at review time), followed by remediation and regression coverage for every concrete issue found.
 - The pre-remediation candidate tip `599c5e8` must not be tagged. The final release commit and `v4.0.1` tag must include the review remediations and be maintainer-signed.
-- The remediated candidate passes the supported Go 1.25.12 unit and race suites, the Go 1.26 compatibility suite, `go vet`, `go build`, `go mod verify`, targeted fuzzing, the overlapping-committee fail-open guard, and `govulncheck` with no reachable or imported vulnerabilities.
+- The remediated candidate passes the supported Go 1.26.6 unit and race suites, `go vet`, `go build`, `go mod verify`, targeted fuzzing, the overlapping-committee fail-open guard, and `govulncheck` with no reachable or imported vulnerabilities.
 - The only remaining qualification is the documented NTilde ModProof security boundary below; deployments that require proof of stronger factor properties need an independently reviewed protocol extension before release.
 
 See the [release-candidate security review](security/2026-08-11-release-candidate-review.md)
@@ -98,13 +98,13 @@ not treat the current proof as providing them.
 ### Maintenance
 
 - Regenerated all protobuf bindings on a single pinned toolchain (protoc-gen-go v1.36.11) for reproducibility. Apart from the intentional NTilde ModProof fields described above, the generated changes are mechanical.
-- Raise the minimum supported Go patch release to 1.25.12; the former 1.25.0 floor has reachable standard-library advisories under `govulncheck`.
+- Raise the minimum supported Go release to 1.26.6. Earlier floors carry standard-library advisories reachable or imported under `govulncheck`: the 1.25.0 floor had reachable advisories; 1.25.12 has a reachable `encoding/asn1` advisory (GO-2026-5972, reached through generated protobuf descriptor init); and 1.25.13 clears that but still leaves an imported stdlib advisory. 1.26.6 is the first release with no reachable or imported advisory for this module.
 
 ### Verification
 
-- Full tests pass with Go 1.25.12 and Go 1.26.0; the full Go 1.25.12 suite also passes under the race detector.
+- Full tests pass with Go 1.26.6; the full suite also passes under the race detector.
 - `go vet ./...`, `go build ./...`, and `go mod verify` pass.
-- `govulncheck` reports no reachable or imported vulnerabilities on Go 1.25.12.
+- `govulncheck` reports no reachable or imported vulnerabilities on Go 1.26.6. One advisory remains in a required (not imported, not reachable) module, `golang.org/x/crypto` (GO-2026-5932), which has no fixed release available.
 - Targeted wire/secrets fuzzing and overlapping-committee resharing tests pass; the fail-open guard confirms the deliberately defanged variants fail.
 
 ### Compatibility

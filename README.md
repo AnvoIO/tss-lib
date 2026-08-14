@@ -64,7 +64,7 @@ annotated release tags are cut.
 
 ## Requirements
 
-- Go 1.25.12 or later (use a currently supported, patched Go toolchain)
+- Go 1.26.6 or later (use a currently supported, patched Go toolchain)
 - Protocol Buffers compiler (for regenerating wire format, not required to build)
 
 ## Building
