@@ -26,6 +26,17 @@ const (
 	// rationale). Frozen once shipped — changing it invalidates every modproof
 	// transcript.
 	fsDomainTag = "AnvoIO.tss-lib.v4.modproof"
+	// verifyMaxModulusBitLen caps N in Verify. sampleYModN expands the
+	// Fiat-Shamir seed in 256-bit blocks separated by a one-byte tag
+	// ([]byte{byte(j)}), so the blocks are distinct PRF evaluations only while
+	// blocks = (bitLen+255)/256 <= 256, i.e. bitLen <= 65536; past that the
+	// expansion repeats an 8 KiB pattern and Y is no longer the value the proof
+	// claims. The same bound caps allocation, which had a floor (2048) but no
+	// ceiling: N arrives off the wire and the mask, expansion buffer and every
+	// candidate are O(bitLen) — a 65537-bit N measured 8.2 GiB / 14s in one
+	// Verify. Keygen/resharing pin peer moduli to exactly 2048 before any proof
+	// is verified, so this excludes nothing this library can emit (32x headroom).
+	verifyMaxModulusBitLen = 65536
 )
 
 var one = big.NewInt(1)
@@ -106,6 +117,14 @@ func NewProof(Session []byte, N, P, Q *big.Int, rand io.Reader) (*ProofMod, erro
 	Phi := new(big.Int).Mul(new(big.Int).Sub(P, one), new(big.Int).Sub(Q, one))
 	// Fig 16.1
 	W := common.GetRandomQuadraticNonResidue(rand, N)
+	// The verifier has checked N's shape since it was written; the prover never
+	// has. An N with no quadratic non-residue (nil, <= 1, even, or a perfect
+	// square) used to leave the sampler retrying forever, and this runs from
+	// keygen round 2 / resharing round 2 with the party mutex held, where not
+	// returning means the party is gone for good with nothing told to its host.
+	if W == nil {
+		return nil, fmt.Errorf("modproof: N has no quadratic non-residue to sample; it must be odd, > 1 and not a perfect square")
+	}
 
 	// Fig 16.2: Y_i ~ Z_N derived via expand-then-reject sampling so the support
 	// set matches the paper's `Y <- Z_N` assumption rather than landing in a
@@ -195,8 +214,10 @@ func (pf *ProofMod) Verify(Session []byte, N *big.Int) bool {
 	if pf == nil || !pf.ValidateBasic() || N == nil {
 		return false
 	}
-	// N must be at least 2048 bits and odd (not prime)
-	if N.BitLen() < 2048 {
+	// N must be within [2048, verifyMaxModulusBitLen] bits and odd (not prime).
+	// The upper bound is checked here, before any O(bitLen) work below, because
+	// N arrives off the wire; see verifyMaxModulusBitLen for the derivation.
+	if N.BitLen() < 2048 || N.BitLen() > verifyMaxModulusBitLen {
 		return false
 	}
 	if N.Bit(0) == 0 {
