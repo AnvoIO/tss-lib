@@ -1,5 +1,9 @@
 MODULE = github.com/AnvoIO/tss-lib/v4
 PACKAGES = $(shell go list ./... | grep -v '/vendor/')
+# The version that generated every .pb.go currently in the tree. protoc runs
+# whichever protoc-gen-go is on PATH, so a different one silently rewrites all
+# eight of them. Refuse rather than regenerate: a wrong answer here is silent.
+PROTOC_GEN_GO_VERSION = v1.36.11
 SIGNING_PACKAGES = ./ecdsa/signing ./eddsa/signing
 SIGNING_RACE_REGEX = TestE2E_(SignZeroMessage|SignMaxMessage|ReSignSameKey)|TestE2E_EdDSA_(SignZeroMessage|SignMaxMessage|ReSignSameKey)|TestUpdateRejectsOutsiderWithoutClearingSensitiveData|TestE2EConcurrent(InvalidSender|MalformedWire)Validation
 LIFECYCLE_RACE_PACKAGES = ./tss ./eddsa/signing
@@ -12,7 +16,18 @@ all: protob test
 ########################################
 ### Protocol Buffers
 
-protob:
+check_protoc_gen_go:
+	@have=$$(protoc-gen-go --version 2>/dev/null | awk '{print $$2}') ; \
+	if [ "$$have" != "$(PROTOC_GEN_GO_VERSION)" ] ; then \
+		echo "protoc-gen-go $(PROTOC_GEN_GO_VERSION) is required to regenerate; found $${have:-none}." ; \
+		echo "Generating with another version rewrites all eight .pb.go files." ; \
+		echo "  go install google.golang.org/protobuf/cmd/protoc-gen-go@$(PROTOC_GEN_GO_VERSION)" ; \
+		echo "If you are deliberately moving to a new version, update PROTOC_GEN_GO_VERSION" ; \
+		echo "in the Makefile in the same commit as the regenerated files." ; \
+		exit 1 ; \
+	fi
+
+protob: check_protoc_gen_go
 	@echo "--> Building Protocol Buffers"
 	@for protocol in message signature ecdsa-keygen ecdsa-signing ecdsa-resharing eddsa-keygen eddsa-signing eddsa-resharing; do \
 		echo "Generating $$protocol.pb.go" ; \
@@ -78,4 +93,4 @@ pre_commit: build test
 # To avoid unintended conflicts with file names, always add to .PHONY
 # # unless there is a reason not to.
 # # https://www.gnu.org/software/make/manual/html_node/Phony-Targets.html
-.PHONY: protob build test_unit test_unit_race test_signing_race test_lifecycle_race test_reshare_failopen test
+.PHONY: check_protoc_gen_go protob build test_unit test_unit_race test_signing_race test_lifecycle_race test_reshare_failopen test
