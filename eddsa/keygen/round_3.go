@@ -74,6 +74,17 @@ func (round *round3) Start() *tss.Error {
 			KGCj := round.temp.KGCs[j]
 			r2msg2 := round.temp.kgRound2Message2s[j].Content().(*KGRound2Message2)
 			KGDj := r2msg2.UnmarshalDeCommitment()
+			// Bound the part count BEFORE DeCommit, which hashes every part it is
+			// handed; nothing upstream bounds how many arrive (ValidateBasic's
+			// NonEmptyMultiBytes passes no expected length, and cannot — it is a
+			// function of the threshold the message layer does not know). The
+			// opening is [r, ssid, ...flatPolyGs] here (round_1 commits the ssid),
+			// so a conforming decommitment is exactly (t+1)*2+2 parts; the ssid and
+			// length checks below are unchanged.
+			if len(KGDj) != (round.Threshold()+1)*2+2 {
+				ch <- vssOut{errors.New("de-commitment session binding verify failed"), nil}
+				return
+			}
 			cmtDeCmt := commitments.HashCommitDecommit{C: KGCj, D: KGDj}
 			ok, decommitted := cmtDeCmt.DeCommit()
 			// The commitment binds this keygen's ssid as its first committed

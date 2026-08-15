@@ -54,7 +54,17 @@ func (round *round4) Start() *tss.Error {
 
 		vCj, vDj := r1msg.UnmarshalVCommitment(), r3msg2.UnmarshalVDeCommitment()
 
-		// 3. unpack flat "v" commitment content
+		// 3. unpack flat "v" commitment content.
+		// Bound the part count BEFORE DeCommit, which hashes every part it is
+		// handed; DGRound3Message2.ValidateBasic (NonEmptyMultiBytes, no expected
+		// length) does not. The old party commits its ssid as the first element,
+		// so a conforming opening is [r, ssid, ...flatVs] = (newT+1)*2+2 parts;
+		// the ssid and length checks below are unchanged.
+		if len(vDj) != (round.NewThreshold()+1)*2+2 {
+			common.Logger.Warningf("resharing v de-commitment verification failed for party %s", Pj)
+			vValidationCulprits = append(vValidationCulprits, Pj)
+			continue
+		}
 		vCmtDeCmt := commitments.HashCommitDecommit{C: vCj, D: vDj}
 		ok, decommitted := vCmtDeCmt.DeCommit()
 		// The old party bound its ssid as the first committed element in round 1,
