@@ -1,6 +1,6 @@
 module github.com/AnvoIO/tss-lib/v3
 
-go 1.25.12
+go 1.26.6
 
 require (
 	filippo.io/bigmod v0.1.0
