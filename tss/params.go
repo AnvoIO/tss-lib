@@ -281,11 +281,24 @@ func NewReSharingParameters(ec elliptic.Curve, ctx, newCtx *PeerContext, partyID
 	}, nil
 }
 
+// OldParties and OldPartyCount read through the EMBEDDED *Parameters (Parties()
+// and the promoted partyCount), which is nil for a ReSharingParameters the
+// caller did not build with NewReSharingParameters — ReSharingParameters{} and
+// json.Unmarshal("{}") both leave it nil. An absent *Parameters describes no old
+// committee, so each answers as the package already does for an undescribed one:
+// no roster, and a count of zero. (The New readers need no such guard — their
+// backing fields are ReSharingParameters' own.)
 func (rgParams *ReSharingParameters) OldParties() *PeerContext {
+	if rgParams.Parameters == nil {
+		return nil
+	}
 	return rgParams.Parties() // wr use the original method for old parties
 }
 
 func (rgParams *ReSharingParameters) OldPartyCount() int {
+	if rgParams.Parameters == nil {
+		return 0
+	}
 	return rgParams.partyCount
 }
 

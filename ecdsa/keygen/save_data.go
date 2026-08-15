@@ -120,6 +120,16 @@ func BuildLocalSaveDataSubset(sourceData LocalPartySaveData, sortedIDs tss.Sorte
 	newData.LocalSecrets = copyLocalSecrets(sourceData.LocalSecrets)
 	newData.ECDSAPub = sourceData.ECDSAPub
 	for j, id := range sortedIDs {
+		// id.Key is a PROMOTED field; reading it dereferences the embedded
+		// *MessageWrapper_PartyID, which encoding/json and a shallow copy leave
+		// nil. Route that to the same graceful fallback as an unresolvable entry
+		// rather than faulting one expression later with no message.
+		if id == nil || id.MessageWrapper_PartyID == nil {
+			common.Logger.Errorf("BuildLocalSaveDataSubset: a party in the roster has no PartyID content")
+			fallback := sourceData
+			fallback.LocalSecrets = copyLocalSecrets(sourceData.LocalSecrets)
+			return fallback
+		}
 		savedIdx, ok := keysToIndices[hex.EncodeToString(id.Key)]
 		if !ok {
 			// Do not panic in constructor paths. Preserve the historical fallback
