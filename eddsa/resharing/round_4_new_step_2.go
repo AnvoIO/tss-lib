@@ -54,7 +54,16 @@ func (round *round4) Start() *tss.Error {
 
 		vCj, vDj := r1msg.UnmarshalVCommitment(), r3msg2.UnmarshalVDeCommitment()
 
-		// 3. unpack flat "v" commitment content
+		// 3. unpack flat "v" commitment content.
+		// Bound the part count BEFORE DeCommit, which hashes every part it is
+		// handed; DGRound3Message2.ValidateBasic (NonEmptyMultiBytes, no expected
+		// length) does not. A conforming opening is [r, ...flatVs] = (newT+1)*2+1
+		// parts; the length check below is unchanged.
+		if len(vDj) != (round.NewThreshold()+1)*2+1 {
+			common.Logger.Warningf("resharing v de-commitment verification failed for party %s", Pj)
+			vValidationCulprits = append(vValidationCulprits, Pj)
+			continue
+		}
 		vCmtDeCmt := commitments.HashCommitDecommit{C: vCj, D: vDj}
 		ok, flatVs := vCmtDeCmt.DeCommit()
 		if !ok || len(flatVs) != (round.NewThreshold()+1)*2 { // they're points so * 2

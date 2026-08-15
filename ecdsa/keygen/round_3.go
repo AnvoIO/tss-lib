@@ -73,6 +73,15 @@ func (round *round3) Start() *tss.Error {
 			KGCj := round.temp.KGCs[j]
 			r2msg2 := round.temp.kgRound2Message2s[j].Content().(*KGRound2Message2)
 			KGDj := r2msg2.UnmarshalDeCommitment()
+			// Bound the part count BEFORE DeCommit, which hashes every part it is
+			// handed; ValidateBasic (NonEmptyMultiBytes, no expected length) does
+			// not. The opening is [r, ...flatPolyGs] here, so a conforming
+			// decommitment is exactly (t+1)*2+1 parts; the length check below is
+			// unchanged.
+			if len(KGDj) != (round.Threshold()+1)*2+1 {
+				ch <- vssOut{errors.New("de-commitment verify failed"), nil}
+				return
+			}
 			cmtDeCmt := commitments.HashCommitDecommit{C: KGCj, D: KGDj}
 			ok, flatPolyGs := cmtDeCmt.DeCommit()
 			// SECURITY (SRC-2026-925): require exactly (threshold+1) VSS
