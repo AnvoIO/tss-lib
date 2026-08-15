@@ -56,7 +56,16 @@ func NewPartyID(id, moniker string, key *big.Int) *PartyID {
 	}
 }
 
+// String must never fault: pid.Moniker is a PROMOTED field, so reading it
+// dereferences the embedded *MessageWrapper_PartyID, which encoding/json and a
+// shallow copy leave nil. A diagnostic that panics while something is being
+// diagnosed removes the diagnosis (a direct call faults, since fmt recovers a
+// panicking String). Answer with a marker instead — there is no return channel
+// here and nothing downstream branches on the text.
 func (pid PartyID) String() string {
+	if pid.MessageWrapper_PartyID == nil {
+		return fmt.Sprintf("{%d,<no PartyID content>}", pid.Index)
+	}
 	return fmt.Sprintf("{%d,%s}", pid.Index, pid.Moniker)
 }
 
