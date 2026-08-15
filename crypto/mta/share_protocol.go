@@ -49,6 +49,18 @@ func AliceInit(
 	return cA, pf, err
 }
 
+// ErrCounterpartyRingUnusable signals that the (NTilde, h1, h2) ring the
+// COUNTERPARTY supplied does not admit a proof that same counterparty would
+// accept: either the ring fails the shape conditions its own verifier applies,
+// or a value this party computed IN that ring is one that verifier rejects.
+// Every proof in this package is built under the counterparty's ring and
+// verified by that same counterparty, so "your proof did not verify" does not on
+// its own say whose input decided the outcome. Detecting the ring-decided case
+// here, before anything is sent, keeps an honest prover from being named for its
+// counterparty's parameters; callers attribute it to the counterparty, not the
+// local party that built the proof.
+var ErrCounterpartyRingUnusable = errors.New("the counterparty's NTilde ring does not admit a verifiable proof")
+
 func BobMid(
 	Session []byte,
 	ec elliptic.Curve,

@@ -46,6 +46,13 @@ func ProveBobWC(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTild
 	if X != nil && (!tss.SameCurve(ec, X.Curve()) || !X.ValidateInSubgroup()) {
 		return nil, errors.New("ProveBobWC() received an invalid X")
 	}
+	// (NTilde, h1, h2) is the counterparty's ring here too — Bob proves under
+	// Alice's ring and Alice verifies — so check it before committing, and
+	// attribute a ring-decided failure to the counterparty. See
+	// ErrCounterpartyRingUnusable.
+	if !counterpartyRingUsable(NTilde, h1, h2) {
+		return nil, ErrCounterpartyRingUnusable
+	}
 
 	NSquared := pk.NSquare()
 
@@ -136,6 +143,15 @@ func ProveBobWC(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, NTild
 	// 17.
 	t2 := new(big.Int).Mul(e, sigma)
 	t2 = t2.Add(t2, tau)
+
+	// Do not hand out a proof whose ring-side values the counterparty's own
+	// verifier rejects: z, zPrm, t and w are the four values computed in the
+	// counterparty's ring. v is in Z_{N^2} (the local Paillier key's ring), so it
+	// is excluded — its degeneracy would be this party's own fault, not the
+	// ring's. See ringSideValuesUsable.
+	if !ringSideValuesUsable(NTilde, z, zPrm, t, w) {
+		return nil, ErrCounterpartyRingUnusable
+	}
 
 	// the regular Bob proof ("without check") is extracted and returned by ProveBob
 	pf := &ProofBob{Z: z, ZPrm: zPrm, T: t, V: v, W: w, S: s, S1: s1, S2: s2, T1: t1, T2: t2}
