@@ -38,10 +38,60 @@ type (
 	}
 )
 
+// counterpartyRingUsable applies, to the ring a prover is about to commit into,
+// the shape conditions RangeProofAlice.Verify and ProofBobWC.Verify both apply
+// to it. The ring is the counterparty's keygen output, so this runs BEFORE a
+// secret is committed into it rather than after the counterparty has rejected
+// the result. (Keygen's DLN proof establishes <h1> == <h2> but not their order,
+// so an order-3 ring passes every keygen gate; this does not fix that, it moves
+// the resulting rejection to the party responsible for the ring.)
+func counterpartyRingUsable(NTilde, h1, h2 *big.Int) bool {
+	if NTilde == nil || h1 == nil || h2 == nil {
+		return false
+	}
+	if !common.IsUsableUnknownOrderModulus(NTilde, verifyMinModulusBitLen) {
+		return false
+	}
+	return common.IsCanonicalGenerator(NTilde, h1) &&
+		common.IsCanonicalGenerator(NTilde, h2) &&
+		h1.Cmp(h2) != 0
+}
+
+// ringSideValuesUsable applies, to values this party has just computed IN the
+// counterparty's ring, the conditions a verifier applies to them. ONLY ring-side
+// values (Pedersen commitments h1^a*h2^b mod NTilde) belong here: a rejection
+// caused by the local party's own Paillier key or randomness is already its own
+// fault, so admitting a value that is NOT ring-decided would name an innocent
+// counterparty. The v == 1 check is applied uniformly — stricter than the
+// verifier, which names it for RangeProofAlice's Z alone — which against
+// large-order generators costs a conforming counterparty a proof with
+// probability about 2^-2046.
+func ringSideValuesUsable(NTilde *big.Int, values ...*big.Int) bool {
+	for _, v := range values {
+		if v == nil || !common.IsInIntervalPositive(v, NTilde) {
+			return false
+		}
+		if v.Cmp(one) == 0 {
+			return false
+		}
+		if new(big.Int).GCD(nil, nil, v, NTilde).Cmp(one) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // ProveRangeAlice implements Alice's range proof used in the MtA and MtAwc protocols from GG18Spec (9) Fig. 9.
 func ProveRangeAlice(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, c, NTilde, h1, h2, m, r *big.Int, rand io.Reader) (*RangeProofAlice, error) {
 	if pk == nil || NTilde == nil || h1 == nil || h2 == nil || c == nil || m == nil || r == nil {
 		return nil, errors.New("ProveRangeAlice constructor received nil value(s)")
+	}
+	// (NTilde, h1, h2) is the counterparty's ring, and so is the verifier that
+	// will judge the result — check it before committing a secret into it so a
+	// ring-decided failure is attributed to the counterparty (via
+	// ErrCounterpartyRingUnusable), not to this honest prover.
+	if !counterpartyRingUsable(NTilde, h1, h2) {
+		return nil, ErrCounterpartyRingUnusable
 	}
 
 	q := ec.Params().N
@@ -94,7 +144,15 @@ func ProveRangeAlice(Session []byte, ec elliptic.Curve, pk *paillier.PublicKey, 
 	s2 := new(big.Int).Mul(e, rho)
 	s2 = new(big.Int).Add(s2, gamma)
 
-	return &RangeProofAlice{Z: z, U: u, W: w, S: s, S1: s1, S2: s2}, nil
+	pf := &RangeProofAlice{Z: z, U: u, W: w, S: s, S1: s1, S2: s2}
+	// Do not hand out a proof whose ring-side values the counterparty's own
+	// verifier rejects. Z is the one Verify names explicitly (pf.Z.Cmp(one) == 0)
+	// and Z is a function of the counterparty's generators, so without this the
+	// counterparty both causes the rejection and reports it against this prover.
+	if !ringSideValuesUsable(NTilde, pf.Z, pf.W) {
+		return nil, ErrCounterpartyRingUnusable
+	}
+	return pf, nil
 }
 
 func RangeProofAliceFromBytes(bzs [][]byte) (*RangeProofAlice, error) {

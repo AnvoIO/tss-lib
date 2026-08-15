@@ -85,6 +85,13 @@ func (round *round1) Start() *tss.Error {
 		ContextJ = append(ContextJ, new(big.Int).SetUint64(uint64(j)).Bytes()...)
 		cA, pi, err := mta.AliceInit(ContextJ, round.Params().EC(), round.key.PaillierPKs[i], k, round.key.NTildej[j], round.key.H1j[j], round.key.H2j[j], round.Rand())
 		if err != nil {
+			// The ring passed above is Pj's keygen output and this party is
+			// proving into it, so a ring-decided failure is Pj's doing. Every
+			// other way AliceInit can fail is a function of this party's own
+			// Paillier key or randomness — no culprit, as before.
+			if errors.Is(err, mta.ErrCounterpartyRingUnusable) {
+				return round.WrapError(fmt.Errorf("failed to init mta: %v", err), Pj)
+			}
 			return round.WrapError(fmt.Errorf("failed to init mta: %v", err))
 		}
 		r1msg1 := NewSignRound1Message1(Pj, round.PartyID(), cA, pi)
