@@ -51,6 +51,12 @@ Non-breaking proof- and boundary-validation hardening (shared with v3.1.1):
 - Validate MtA public inputs before transcript hashing, require Bob-WC points to use the expected curve, reject nil private inputs, and bound response scalars and decrypted shares.
 - Make `BaseParty.ValidateMessage` reject nil message content without dereferencing it in the error path.
 - Deep-copy `LocalSecrets` on every `BuildLocalSaveDataSubset` return path, including missing-signer fallback, so re-sharing (round 5) and HD signing cannot alter the caller's saved share through a shared pointer.
+- Bound the declared length in `ECPoint.GobDecode` before allocating, so a malformed length prefix cannot reserve a large buffer ahead of the read that would reject it anyway.
+- Bound the exported crypto primitives against out-of-protocol inputs: an upper modulus-bit-length bound in `ProofMod.Verify`, a rejection floor in `paillier.GenerateKeyPair`, a width mask on `paillier.GenerateXs` candidates, and an empty-blinding-group guard in `paillier.Encrypt`. In-protocol moduli are already pinned to 2048 bits, so these change no value the protocol produces.
+- Answer "no such value" instead of looping in `GetRandomPrimeInt`, `GetRandomPositiveRelativelyPrimeInt`, and `GetRandomQuadraticNonResidue` (adding a try bound plus perfect-square and parity guards to the last), fail `modproof.NewProof` rather than inherit that wait, and let the concurrent safe-prime generator be cancelled while handing over a result.
+- Bound de-commitment part counts before `DeCommit` hashes them, in keygen round 3 and resharing round 4 on both curves.
+- Return a marker from `PartyID.String()` and guard `BuildLocalSaveDataSubset` and the `ReSharingParameters` old-committee readers against a nil embedded pointer, so a `PartyID` or `ReSharingParameters` shape produced by `encoding/json` or a shallow copy cannot fault.
+- In MtA, check the counterparty's `(NTilde, h1, h2)` ring and the values computed in it on the proving side, and attribute a ring-decided failure to the counterparty that supplied the ring rather than to the honest prover that built the proof.
 
 ### Changed (breaking)
 
