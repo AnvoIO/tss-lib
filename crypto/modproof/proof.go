@@ -48,6 +48,14 @@ func NewProof(Session []byte, N, P, Q *big.Int, rand io.Reader) (*ProofMod, erro
 	Phi := new(big.Int).Mul(new(big.Int).Sub(P, one), new(big.Int).Sub(Q, one))
 	// Fig 16.1
 	W := common.GetRandomQuadraticNonResidue(rand, N)
+	// The verifier has checked N's shape since it was written; the prover never
+	// has. An N with no quadratic non-residue (nil, <= 1, even, or a perfect
+	// square) used to leave the sampler retrying forever, and this runs from
+	// keygen round 2 / resharing round 2 with the party mutex held, where not
+	// returning means the party is gone for good with nothing told to its host.
+	if W == nil {
+		return nil, fmt.Errorf("modproof: N has no quadratic non-residue to sample; it must be odd, > 1 and not a perfect square")
+	}
 
 	// Fig 16.2
 	Y := [Iterations]*big.Int{}

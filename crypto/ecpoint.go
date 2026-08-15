@@ -328,24 +328,50 @@ func (p *ECPoint) GobEncode() ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func (p *ECPoint) GobDecode(buf []byte) error {
-	reader := bytes.NewReader(buf)
+// readLengthPrefixed reads a little-endian uint32 length and then that many
+// bytes, refusing to reserve the buffer before the length is known to be
+// satisfiable.
+//
+// The bound comes straight out of GobEncode above, which writes exactly
+// 4 + len(x) + 4 + len(y) bytes. Each declared length is therefore at most the
+// number of bytes still unread when its prefix is consumed, which is what
+// bytes.Reader.Len reports. (The concrete ceiling is much smaller -- a
+// coordinate is (*big.Int).GobEncode output, one version/sign byte plus
+// ceil(bitLen/8) magnitude bytes, over a field element of tss.EC(), so 33
+// bytes and a 74-byte encoding on secp256k1 -- but the remaining-bytes bound
+// is exact, needs no curve lookup, and rejects precisely the set the old
+// n != int(length) check already rejected.)
+//
+// That equivalence is the point: bytes.Reader.Read fills min(len(b), remaining)
+// in a single call, so any length above the remaining count already failed
+// n != int(length). This moves the identical rejection to BEFORE the
+// allocation. Previously a 4-byte input declaring 0xFFFFFFFF reserved 4 GiB
+// and only then compared the counts.
+func readLengthPrefixed(reader *bytes.Reader) ([]byte, error) {
 	var length uint32
 	if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
+		return nil, err
+	}
+	if int64(length) > int64(reader.Len()) {
+		return nil, fmt.Errorf("gob decode failed: declared length %d exceeds the %d bytes remaining", length, reader.Len())
+	}
+	bz := make([]byte, length)
+	n, err := reader.Read(bz)
+	if n != int(length) || err != nil {
+		return nil, fmt.Errorf("gob decode failed: %v", err)
+	}
+	return bz, nil
+}
+
+func (p *ECPoint) GobDecode(buf []byte) error {
+	reader := bytes.NewReader(buf)
+	x, err := readLengthPrefixed(reader)
+	if err != nil {
 		return err
 	}
-	x := make([]byte, length)
-	n, err := reader.Read(x)
-	if n != int(length) || err != nil {
-		return fmt.Errorf("gob decode failed: %v", err)
-	}
-	if err := binary.Read(reader, binary.LittleEndian, &length); err != nil {
+	y, err := readLengthPrefixed(reader)
+	if err != nil {
 		return err
-	}
-	y := make([]byte, length)
-	n, err = reader.Read(y)
-	if n != int(length) || err != nil {
-		return fmt.Errorf("gob decode failed: %v", err)
 	}
 
 	X := new(big.Int)

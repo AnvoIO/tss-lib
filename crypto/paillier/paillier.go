@@ -36,6 +36,16 @@ const (
 	ProofIters         = 13
 	verifyPrimesUntil  = 1000 // Verify uses primes <1000
 	pQBitLenDifference = 3    // >1020-bit P-Q
+	// minModulusBitLen is the smallest modulus GenerateKeyPair can produce at
+	// all. Below it the |P-Q| retry (BitLen(P-Q) >= h - pQBitLenDifference, with
+	// h = modulusBitLen/2) is not merely slow but unsatisfiable: the safe-prime
+	// generator sets the top two bits of the (h-1)-bit Germain prime, so every
+	// safe prime it can return lies in a window of width 2^(h-2), and for the
+	// three smallest widths it accepts (h=6/7/8) that window holds a single
+	// candidate — both draws coincide, |P-Q| = 0, and no round breaks. h=9 is the
+	// first width with a wide-enough spread, so 18 is the exact floor and it
+	// refuses no size that could have terminated; 2048 was never in question.
+	minModulusBitLen = 18
 	// verifyMinModulusBitLen is the minimum Paillier modulus bit length accepted
 	// by Proof.Verify; matches the paillierBitsLen enforced by the keygen /
 	// resharing wire-format checks.
@@ -64,6 +74,7 @@ type (
 var (
 	ErrMessageTooLong   = fmt.Errorf("the message is too large or < 0")
 	ErrMessageMalFormed = fmt.Errorf("the message is mal-formed")
+	ErrModulusMalFormed = fmt.Errorf("the public key modulus is mal-formed")
 
 	zero = big.NewInt(0)
 	one  = big.NewInt(1)
@@ -76,6 +87,9 @@ func init() {
 
 // len is the length of the modulus (each prime = len / 2)
 func GenerateKeyPair(ctx context.Context, rand io.Reader, modulusBitLen int, optionalConcurrency ...int) (privateKey *PrivateKey, publicKey *PublicKey, err error) {
+	if modulusBitLen < minModulusBitLen {
+		return nil, nil, fmt.Errorf("GenerateKeyPair: modulusBitLen must be at least %d, got %d", minModulusBitLen, modulusBitLen)
+	}
 	var concurrency int
 	if 0 < len(optionalConcurrency) {
 		if 1 < len(optionalConcurrency) {
@@ -127,6 +141,12 @@ func (publicKey *PublicKey) EncryptAndReturnRandomness(rand io.Reader, m *big.In
 		return nil, nil, ErrMessageTooLong
 	}
 	x = common.GetRandomPositiveRelativelyPrimeInt(rand, publicKey.N)
+	if x == nil {
+		// (Z/NZ)* is empty, so there is no randomness to blind with. Only
+		// reachable for N <= 1, which the m < N test above cannot catch on its
+		// own: for N = 1 the one admissible m is 0.
+		return nil, nil, ErrModulusMalFormed
+	}
 	N2 := publicKey.NSquare()
 	// 1. gamma^m mod N2
 	Gm := common.ModInt(N2).Exp(publicKey.Gamma(), m)
@@ -307,6 +327,16 @@ func GenerateXs(m int, k, N *big.Int, ecdsaPub *crypto2.ECPoint) []*big.Int {
 	kb, sXb, sYb, Nb := k.Bytes(), sX.Bytes(), sY.Bytes(), N.Bytes()
 	bits := N.BitLen()
 	blocks := int(gmath.Ceil(float64(bits) / 256))
+	// Cut each candidate down to N's width before testing it against N, the way
+	// modproof.sampleYModN does. A candidate is `blocks` concatenated 256-bit
+	// hash blocks, so without the mask it is up to 256*blocks bits wide while
+	// only candidates below N are accepted: the acceptance rate bottoms out at
+	// 2^-255 for bits ≡ 1 (mod 256), a live resample the caller Verify parks on.
+	// The mask changes no challenge this library has produced — keygen/resharing
+	// pin peer moduli to exactly 2048 bits, and for bits ≡ 0 (mod 256) the
+	// concatenation is already exactly `bits` wide so the mask clears nothing.
+	mask := new(big.Int).Lsh(one, uint(bits))
+	mask.Sub(mask, one)
 	chs := make([]chan []byte, blocks)
 	for k := range chs {
 		chs[k] = make(chan []byte)
@@ -330,6 +360,7 @@ func GenerateXs(m int, k, N *big.Int, ecdsaPub *crypto2.ECPoint) []*big.Int {
 			xi = append(xi, rx...) // xi1||···||xib
 		}
 		ret[i] = new(big.Int).SetBytes(xi)
+		ret[i].And(ret[i], mask)
 		if common.IsNumberInMultiplicativeGroup(N, ret[i]) {
 			i++
 		} else {

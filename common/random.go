@@ -18,6 +18,15 @@ import (
 
 const (
 	mustGetRandomIntMaxBits = 5000
+	// maxQuadraticNonResidueTries bounds GetRandomQuadraticNonResidue so a
+	// caller-supplied io.Reader that has stopped producing entropy cannot park a
+	// party there forever (modproof.NewProof samples with the party mutex held).
+	// For an admissible n a try succeeds with probability > phi(n)/2n, minimised
+	// over bounded n by the odd primorial (> 1/16 for every reachable n given the
+	// mustGetRandomIntMaxBits cap), so 1024 tries all miss with probability well
+	// below 2^-95; for the products of two large primes this library samples over
+	// it is ~1/2 per try.
+	maxQuadraticNonResidueTries = 1024
 )
 
 // MustGetRandomInt panics if it is unable to gather entropy from `io.Reader` or when `bits` is <= 0
@@ -57,8 +66,12 @@ func GetRandomPositiveInt(rand io.Reader, lessThan *big.Int) *big.Int {
 	return try
 }
 
+// GetRandomPrimeInt returns a random prime of exactly `bits` bits, or nil when
+// no such prime exists (bits < 2: crypto/rand.Prime's own documented contract,
+// and the only 1-bit values 0 and 1 are not prime — the fallback loop below
+// cannot do better, since MustGetRandomInt(rand, 1) draws only 0).
 func GetRandomPrimeInt(rand io.Reader, bits int) *big.Int {
-	if bits <= 0 {
+	if bits < 2 {
 		return nil
 	}
 	try, err := cryptorand.Prime(rand, bits)
@@ -75,10 +88,13 @@ func GetRandomPrimeInt(rand io.Reader, bits int) *big.Int {
 	return try
 }
 
-// Generate a random element in the group of all the elements in Z/nZ that
-// has a multiplicative inverse.
+// GetRandomPositiveRelativelyPrimeInt returns a uniformly random element of
+// (Z/nZ)*, the group of elements of Z/nZ that have a multiplicative inverse, or
+// nil if n is nil or <= 1 (no such element exists; for n == 1 the old n <= 0
+// guard left a loop whose acceptance probability was exactly zero, since
+// MustGetRandomInt(rand, 1) draws only 0).
 func GetRandomPositiveRelativelyPrimeInt(rand io.Reader, n *big.Int) *big.Int {
-	if n == nil || zero.Cmp(n) != -1 {
+	if n == nil || n.Cmp(one) <= 0 {
 		return nil
 	}
 	var try *big.Int
@@ -110,9 +126,24 @@ func GetRandomGeneratorOfTheQuadraticResidue(rand io.Reader, n *big.Int) *big.In
 	return fSq.Mod(fSq, n)
 }
 
-// GetRandomQuadraticNonResidue returns a quadratic non residue of odd n.
+// GetRandomQuadraticNonResidue returns a w in (0, n) with Jacobi(w, n) = -1.
+//
+// It returns nil when n is outside the domain where such a w exists — n nil,
+// n <= 1, n even, or n a perfect square — and nil in the vanishingly unlikely
+// event that maxQuadraticNonResidueTries draws all miss. For a perfect square
+// every prime-power exponent is even, so the Jacobi symbol is the constant +1
+// on units and never the -1 the loop waits for; for n <= 1 or even n big.Jacobi
+// panics. The preconditions used to live in this comment only ("of odd n")
+// while the loop just kept sampling. See maxQuadraticNonResidueTries for the
+// try-bound derivation.
 func GetRandomQuadraticNonResidue(rand io.Reader, n *big.Int) *big.Int {
-	for {
+	if n == nil || n.Cmp(one) <= 0 || n.Bit(0) == 0 {
+		return nil
+	}
+	if sqrt := new(big.Int).Sqrt(n); new(big.Int).Mul(sqrt, sqrt).Cmp(n) == 0 {
+		return nil
+	}
+	for i := 0; i < maxQuadraticNonResidueTries; i++ {
 		w := GetRandomPositiveInt(rand, n)
 		if w == nil {
 			return nil
@@ -121,6 +152,7 @@ func GetRandomQuadraticNonResidue(rand io.Reader, n *big.Int) *big.Int {
 			return w
 		}
 	}
+	return nil
 }
 
 // GetRandomBytes returns random bytes of length.
